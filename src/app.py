@@ -123,6 +123,17 @@ def line_item_performance_report():
 
                 st.header("3. Results")
 
+                st.markdown(
+                    """
+                    <div style="background-color: #e3f2fd; padding: 12px; border-radius: 5px; margin: 10px 0;">
+                        <p style="color: #1976d2; font-size: 16px; margin: 0;">
+                            💡 Use summary metrics internally only, do not report these to the client since these are showing total duplicated revenue and transaction impact. These are not deduplicated transactions.
+                        </p>
+                    </div>
+                """,
+                    unsafe_allow_html=True,
+                )
+
                 # Summary metrics
                 summary = processor.get_summary_stats()
                 col1, col2, col3, col4 = st.columns(4)
@@ -134,11 +145,15 @@ def line_item_performance_report():
 
                 with col2:
                     st.metric(
-                        "Unique Transactions", f"{summary['total_transactions']:,}"
+                        "Total Transactions (Duplicated)",
+                        f"{summary['total_transactions']:,}",
                     )
 
                 with col3:
-                    st.metric("Total Revenue", f"${summary['total_revenue']:,.2f}")
+                    st.metric(
+                        "Total Revenue (Duplicated)",
+                        f"${summary['total_revenue']:,.2f}",
+                    )
 
                 with col4:
                     total_spend = (
@@ -326,13 +341,13 @@ def line_item_performance_report():
                 with total_cols[1]:
                     if "Unique Transaction Count" in total_row_data:
                         st.metric(
-                            "Total Transactions",
+                            "Total Transactions (Duplicated)",
                             f"{int(total_row_data['Unique Transaction Count']):,}",
                         )
                 with total_cols[2]:
                     if "Total Transaction Amount" in total_row_data:
                         st.metric(
-                            "Total Revenue",
+                            "Total Revenue (Duplicated)",
                             f"${total_row_data['Total Transaction Amount']:,.2f}",
                         )
                 with total_cols[3]:
