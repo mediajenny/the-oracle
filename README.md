@@ -1,190 +1,187 @@
-# Dashboard Transactions Line Item Performance Report Analyzer
+# The Oracle - Campaign Performance Tool
 
-A Streamlit application that analyzes Dashboard Transaction Events data to generate Line Item Performance Reports.
+A modern Next.js application for analyzing campaign performance with line item and creative reports. Converted from a Streamlit application to provide better scalability, team collaboration, and deployment options.
 
 ## Features
 
-- **Multiple File Support**: Upload multiple transaction detail files that are automatically combined
-- **Extract Line Item Data**: Parses JSON impression data to extract LINEITEMID values
-- **Transaction Attribution**: Associates transactions with line items in their impression journey
-- **Automatic Deduplication**: Removes duplicate transactions based on Transaction ID
-- **Data Enrichment**: Joins with NXN lookup data for line item names and spend information
-- **Performance Metrics**: Calculates Influenced ROAS (Not Deduplicated) for each line item
-- **Interactive UI**: Filter, sort, and explore results with an intuitive Streamlit interface
-- **Export Functionality**: Download results as Excel or CSV files
+- **File Upload**: Upload CSV and Excel files (transaction data and NXN lookup files)
+- **Data Processing**: Extract LINEITEMID values from JSON impression data and aggregate transaction metrics
+- **Performance Reports**: Generate detailed line item performance reports with ROAS calculations
+- **Team Collaboration**: Share files and reports with team members
+- **Export**: Download reports as Excel or CSV files
+- **Authentication**: Secure team-based authentication with NextAuth.js
+- **Persistent Storage**: Files stored in Vercel Blob, metadata in Vercel Postgres
 
-## Installation
+## Tech Stack
 
-This project uses Poetry for dependency management.
+- **Framework**: Next.js 14+ (App Router)
+- **UI**: React + Shadcn/UI + Tailwind CSS
+- **File Storage**: Vercel Blob Storage
+- **Database**: Vercel Postgres
+- **Authentication**: NextAuth.js
+- **File Processing**: TypeScript (xlsx, papaparse libraries)
+
+## Getting Started
 
 ### Prerequisites
 
-- Python 3.10 or higher
-- Poetry ([installation instructions](https://python-poetry.org/docs/#installation))
+- Node.js 18+ 
+- npm or yarn
+- Vercel account (for deployment)
+- Vercel Postgres database
+- Vercel Blob storage
 
-### Setup
+### Installation
 
-1. Clone or navigate to the project directory:
-   ```bash
-   cd excel-lineitem-analyzer
-   ```
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd the-oracle
+```
 
 2. Install dependencies:
-   ```bash
-   poetry install
-   ```
+```bash
+npm install
+```
 
-## Usage
+3. Set up environment variables:
+```bash
+cp .env.example .env
+```
 
-### Running the Application
+Edit `.env` and add your configuration:
+- `NEXTAUTH_URL`: Your application URL (e.g., `http://localhost:3000` for local dev)
+- `NEXTAUTH_SECRET`: A random secret string (generate with `openssl rand -base64 32`)
+- `POSTGRES_URL`: Your Vercel Postgres connection string
+- `POSTGRES_PRISMA_URL`: Your Vercel Postgres Prisma connection string
+- `POSTGRES_URL_NON_POOLING`: Your Vercel Postgres non-pooling connection string
+- `BLOB_READ_WRITE_TOKEN`: Your Vercel Blob read/write token
 
-1. Start the Streamlit app:
-   ```bash
-   poetry run streamlit run src/app.py
-   ```
+4. Initialize the database:
+```bash
+# Run the schema SQL file against your Postgres database
+# You can use psql or the Vercel dashboard SQL editor
+psql $POSTGRES_URL -f lib/db/schema.sql
+```
 
-2. Open your web browser to the URL shown in the terminal
+5. Run the development server:
+```bash
+npm run dev
+```
 
-3. Upload your files:
-   - **Transaction Detail Files**: One or more files with DATA tabs
-   - **NXN Lookup File**: One file with line item delivery lookup data
+6. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-4. Click "Analyze Line Item Performance" to process the data
+## Deployment to Vercel
 
-5. View results, apply filters, and export reports
+1. Push your code to a Git repository (GitHub, GitLab, or Bitbucket).
 
-### Required File Structure
+2. Import your project in the [Vercel Dashboard](https://vercel.com/new).
 
-#### Transaction Detail Files (one or more)
-**Supported Formats:** Excel (.xlsx, .xls) or CSV (.csv)
+3. Add environment variables in the Vercel project settings:
+   - `NEXTAUTH_URL`: Your production URL
+   - `NEXTAUTH_SECRET`: Generate a secure secret
+   - `POSTGRES_URL`: From your Vercel Postgres database
+   - `POSTGRES_PRISMA_URL`: From your Vercel Postgres database
+   - `POSTGRES_URL_NON_POOLING`: From your Vercel Postgres database
+   - `BLOB_READ_WRITE_TOKEN`: From your Vercel Blob storage
 
-**Excel files:**
-- Must contain a **DATA** tab with these columns:
-  - `Transaction ID`: Unique transaction identifier
-  - `Transaction Total`: Transaction amount
-  - `Impressions`: JSON array of impression objects containing LINEITEMID
+4. Deploy! Vercel will automatically build and deploy your application.
 
-**CSV files:**
-- Must have headers in the first row
-- Same required columns as Excel format
+## Database Setup
 
-**Notes:**
-- You can upload multiple transaction files
-- Files are automatically combined
-- Duplicate transactions (same Transaction ID) are removed
+The application uses the following database schema (defined in `lib/db/schema.sql`):
 
-#### NXN Lookup File (one file)
-**Supported Formats:** Excel (.xlsx, .xls) or CSV (.csv)
+- **users**: User accounts with team associations
+- **teams**: Team/organization information
+- **uploaded_files**: File metadata and blob URLs
+- **reports**: Generated report metadata and data
+- **file_shares**: File sharing permissions
+- **report_shares**: Report sharing permissions
 
-**Excel formats:**
-1. **NXN LINE ITEM ID DELIVERY LOOKUP** sheet (standard format)
-2. **Programmatic** sheet (Green Soul format)
-3. Note: Excel files have headers on row 2
+Run the schema SQL file against your Postgres database to create these tables.
 
-**CSV format:**
-- Headers in first row
+## File Format Requirements
 
-**Required columns (all formats):**
+### Transaction Detail Files
+
+**Supported Formats**: Excel (.xlsx, .xls) or CSV (.csv)
+
+**Required Columns**:
+- `Transaction ID`: Unique transaction identifier
+- `Transaction Total`: Transaction amount
+- `Impressions`: JSON array of impression objects containing LINEITEMID
+
+**Excel files**: Must contain a **DATA** tab (case-insensitive)
+
+**CSV files**: Headers in first row
+
+### NXN Lookup File
+
+**Supported Formats**: Excel (.xlsx, .xls) or CSV (.csv)
+
+**Required Columns**:
 - `line_item_id`: Line item identifier (matches LINEITEMID from impressions)
 - `line_item_name`: Friendly name for the line item
 - `impressions`: Impression count
 - `advertiser_invoice`: DSP spend amount
 
+**Excel files**: Supports:
+- **NXN LINE ITEM ID DELIVERY LOOKUP** sheet
+- **Programmatic** sheet (Green Soul format)
+- Headers on row 2 (index 1)
+
+**CSV files**: Headers in first row
+
 ## How It Works
 
-1. **Data Loading**: Loads multiple transaction files and combines them into a single dataset
-
-2. **Deduplication**: Removes duplicate transactions based on Transaction ID (keeps first occurrence)
-
-3. **Impression Parsing**: Extracts all unique LINEITEMID values from the JSON arrays in the Impressions column
-
-4. **Transaction Attribution**: For each transaction, identifies all unique line items in its impression journey
-
-5. **Aggregation**: Groups by LINEITEMID to calculate:
-   - Unique transaction count
-   - List of transaction IDs
-   - Total transaction amount
-
-6. **Enrichment**: Left joins with NXN lookup table to add:
-   - Line item name
-   - Impression count
-   - DSP spend (advertiser_invoice)
-
-7. **ROAS Calculation**: Computes Influenced ROAS = Total Transaction Amount / DSP Spend
-
-8. **Flagging**: Identifies line items with no match in NXN lookup table
-
-## Output Columns
-
-| Column | Description |
-|--------|-------------|
-| LINEITEMID | Line item identifier from impression data |
-| Unique Transaction Count | Number of unique transactions containing this line item |
-| Transaction IDs | Comma-separated list of transaction IDs |
-| Total Transaction Amount | Sum of transaction amounts for all transactions |
-| NXN Line Item Name | Friendly name from NXN lookup table |
-| NXN Impressions | Impression count from NXN lookup table |
-| NXN Spend | Advertiser invoice (spend) from NXN lookup table |
-| Influenced ROAS (Not Deduplicated) | Revenue / Spend ratio |
-| Match Status | 'Matched' or 'No Match Found' |
+1. **Upload Files**: Users upload transaction files and NXN lookup files
+2. **Process Data**: The system extracts LINEITEMID values from JSON impression data
+3. **Aggregate**: Transactions are aggregated by line item with counts and totals
+4. **Enrich**: Data is enriched with NXN lookup information (names, spend, impressions)
+5. **Calculate Metrics**: Influenced ROAS is calculated for each line item
+6. **Generate Report**: Results are displayed in an interactive table with filtering and sorting
+7. **Export**: Reports can be exported as Excel or CSV files
 
 ## Project Structure
 
 ```
-excel-lineitem-analyzer/
-├── pyproject.toml           # Poetry configuration and dependencies
-├── poetry.lock              # Locked dependency versions
-├── README.md                # This file
-└── src/
-    ├── __init__.py          # Package initialization
-    ├── app.py               # Streamlit application (main entry point)
-    └── data_processor.py    # Core data processing logic
+the-oracle/
+├── app/                    # Next.js app directory
+│   ├── api/               # API routes
+│   ├── (auth)/            # Auth pages
+│   ├── reports/           # Reports page
+│   └── layout.tsx         # Root layout
+├── components/            # React components
+│   ├── ui/               # Shadcn UI components
+│   └── ...               # Feature components
+├── lib/                   # Utility libraries
+│   ├── db/               # Database utilities
+│   ├── exporters/        # Export functionality
+│   ├── file-parsers.ts   # File parsing utilities
+│   ├── processors/       # Data processing logic
+│   └── storage.ts        # Blob storage utilities
+└── types/                 # TypeScript type definitions
 ```
-
-## Dependencies
-
-- **streamlit**: Web application framework
-- **pandas**: Data manipulation and analysis
-- **openpyxl**: Excel file reading and writing
 
 ## Development
 
 ### Running Tests
 
-(Tests to be implemented)
-
 ```bash
-poetry run pytest
+npm run lint
 ```
 
-### Code Structure
+### Building for Production
 
-- `src/app.py`: Streamlit UI and user interaction
-- `src/data_processor.py`: Core business logic for data processing
-  - `DataProcessor` class: Main processing engine
-  - `load_excel_file()`: Excel file loading utility
-  - `export_to_excel()`: Excel export utility
-
-## Troubleshooting
-
-### Common Issues
-
-1. **"Sheet not found" error**:
-   - Transaction files must have a tab named "DATA"
-   - Lookup files should have either "NXN LINE ITEM ID DELIVERY LOOKUP" or "Programmatic" tab
-
-2. **"Missing required columns" error**: Verify your lookup file contains: `line_item_id`, `line_item_name`, `impressions`, `advertiser_invoice`
-
-3. **JSON parsing errors**: Check that the Impressions column contains valid JSON arrays
-
-4. **Missing LINEITEMID**: Verify that impression objects in the Impressions column include a LINEITEMID field
-
-5. **No matches in NXN lookup**: Check that line_item_id values in the lookup table match LINEITEMID values from impressions
+```bash
+npm run build
+npm start
+```
 
 ## License
 
-(To be determined)
+[Your License Here]
 
-## Version
+## Support
 
-1.0.0
+For issues or questions, please open an issue in the repository.
