@@ -34,7 +34,7 @@ export async function hasPermission({
     // Get user role - try with role column, fallback without if it doesn't exist
     let userResult
     let userRole: UserRole = "member"
-    
+
     try {
       userResult = await sql`
         SELECT COALESCE(role, 'member') as role FROM users WHERE id = ${userId}
@@ -91,9 +91,9 @@ export async function hasPermission({
         return true
       }
       // Default member permissions
-      return permission === "can_view_reports" || 
-             permission === "can_create_reports" || 
-             permission === "can_upload_files" || 
+      return permission === "can_view_reports" ||
+             permission === "can_create_reports" ||
+             permission === "can_upload_files" ||
              permission === "can_share_files"
     }
 
@@ -109,38 +109,71 @@ export async function hasPermission({
  */
 export async function isAdmin(userId: string): Promise<boolean> {
   try {
+    console.log(`[isAdmin] Checking admin status for userId: ${userId}`)
+
     // First try to get role from users table
     const result = await sql`
       SELECT role, email FROM users WHERE id = ${userId}
     `
-    
+
     if (result.rows.length === 0) {
+      console.log(`[isAdmin] User not found in database for userId: ${userId}`)
       return false
     }
-    
+
     const user = result.rows[0]
-    
+    const email = user.email || ""
+    const role = user.role || null
+
+    console.log(`[isAdmin] User found - email: ${email}, role: ${role}`)
+
     // If role column exists and is 'admin', return true
-    if (user.role === "admin") {
+    if (role === "admin") {
+      console.log(`[isAdmin] User is admin by role`)
       return true
     }
-    
+
     // Fallback: check email for admin (for backward compatibility before schema update)
-    const email = user.email || ""
-    return email.toLowerCase().includes("admin") || email === "admin@example.com"
-  } catch (error) {
+    const emailLower = email.toLowerCase()
+    const isAdminByEmail = emailLower.includes("admin") || email === "admin@example.com" || emailLower === "admin@example.com"
+
+    console.log(`[isAdmin] Email check - emailLower: ${emailLower}, isAdminByEmail: ${isAdminByEmail}`)
+
+    if (isAdminByEmail) {
+      console.log(`[isAdmin] User is admin by email`)
+      return true
+    }
+
+    console.log(`[isAdmin] User is not admin`)
+    return false
+  } catch (error: any) {
+    console.error(`[isAdmin] Error checking admin status for userId ${userId}:`, error)
+
     // If role column doesn't exist yet, fall back to email check
     try {
+      console.log(`[isAdmin] Attempting fallback email check (role column may not exist)`)
       const result = await sql`
         SELECT email FROM users WHERE id = ${userId}
       `
       if (result.rows.length > 0) {
         const email = result.rows[0].email || ""
-        return email.toLowerCase().includes("admin") || email === "admin@example.com"
+        const emailLower = email.toLowerCase()
+        const isAdminByEmail = emailLower.includes("admin") || email === "admin@example.com" || emailLower === "admin@example.com"
+
+        console.log(`[isAdmin] Fallback email check - email: ${email}, emailLower: ${emailLower}, isAdminByEmail: ${isAdminByEmail}`)
+
+        if (isAdminByEmail) {
+          console.log(`[isAdmin] User is admin by email (fallback)`)
+          return true
+        }
+      } else {
+        console.log(`[isAdmin] User not found in fallback query`)
       }
-    } catch (e) {
-      // Ignore
+    } catch (e: any) {
+      console.error(`[isAdmin] Fallback email check also failed:`, e)
     }
+
+    console.log(`[isAdmin] Returning false - all checks failed`)
     return false
   }
 }
@@ -157,7 +190,7 @@ export async function canManageTeam(userId: string, teamId: string): Promise<boo
     teamId,
     permission: "can_manage_team",
   })
-  
+
   if (hasPerm) return true
 
   // Check if user is team_admin role - try with role column, fallback without
@@ -254,4 +287,3 @@ export async function setUserTeamPermissions(
     return result.rows[0] as UserTeamPermissions
   }
 }
-

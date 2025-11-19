@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     const transactionData: TransactionRow[] = []
     for (const fileMeta of transactionFilesResult.rows) {
       let file: File
-      
+
       // Handle local file paths vs Vercel Blob URLs
       if (fileMeta.blob_url.startsWith("/uploads/")) {
         // Local file - read from filesystem
@@ -90,17 +90,40 @@ export async function POST(request: NextRequest) {
       }
 
       const parsed = await parseFile(file)
-      const rows = parsed.data.map((row: any) => ({
-        ...row,
-        "Source File Name": fileMeta.file_name,
-      }))
-      transactionData.push(...rows)
+
+      // Normalize column names to match expected format (case-insensitive matching)
+      const normalizeColumnName = (name: string): string => {
+        const normalized = name?.toString().trim().toLowerCase() || ""
+        // Map common variations to expected column names
+        const columnMap: Record<string, string> = {
+          "transaction id": "Transaction ID",
+          "transaction_id": "Transaction ID",
+          "transactionid": "Transaction ID",
+          "transaction total": "Transaction Total",
+          "transaction_total": "Transaction Total",
+          "transactiontotal": "Transaction Total",
+          "impressions": "Impressions",
+        }
+        return columnMap[normalized] || name
+      }
+
+      // Normalize column names in the data
+      const normalizedRows = parsed.data.map((row: any) => {
+        const normalizedRow: any = { "Source File Name": fileMeta.file_name }
+        for (const [key, value] of Object.entries(row)) {
+          const normalizedKey = normalizeColumnName(key)
+          normalizedRow[normalizedKey] = value
+        }
+        return normalizedRow
+      })
+
+      transactionData.push(...normalizedRows)
     }
 
     // Fetch and parse NXN lookup file
     const nxnFileMeta = nxnFileResult.rows[0]
     let nxnFile: File
-    
+
     // Handle local file paths vs Vercel Blob URLs
     if (nxnFileMeta.blob_url.startsWith("/uploads/")) {
       // Local file - read from filesystem
@@ -121,7 +144,35 @@ export async function POST(request: NextRequest) {
     }
 
     const parsedNxn = await parseFile(nxnFile, { headerRow: 1 })
-    const nxnLookupData: NxnLookupRow[] = parsedNxn.data as NxnLookupRow[]
+
+    // Normalize NXN lookup column names
+    const normalizeNxnColumnName = (name: string): string => {
+      const normalized = name?.toString().trim().toLowerCase() || ""
+      const columnMap: Record<string, string> = {
+        "line_item_id": "line_item_id",
+        "line item id": "line_item_id",
+        "lineitemid": "line_item_id",
+        "line_item_name": "line_item_name",
+        "line item name": "line_item_name",
+        "lineitemname": "line_item_name",
+        "impressions": "impressions",
+        "advertiser_invoice": "advertiser_invoice",
+        "advertiser invoice": "advertiser_invoice",
+        "advertiserinvoice": "advertiser_invoice",
+      }
+      return columnMap[normalized] || name
+    }
+
+    const normalizedNxnData = parsedNxn.data.map((row: any) => {
+      const normalizedRow: any = {}
+      for (const [key, value] of Object.entries(row)) {
+        const normalizedKey = normalizeNxnColumnName(key)
+        normalizedRow[normalizedKey] = value
+      }
+      return normalizedRow
+    })
+
+    const nxnLookupData: NxnLookupRow[] = normalizedNxnData as NxnLookupRow[]
 
     // Process transactions
     const deduplicatedTransactions = loadMultipleTransactionFiles(transactionData)
@@ -179,4 +230,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

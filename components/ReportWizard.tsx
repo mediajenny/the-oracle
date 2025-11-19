@@ -18,11 +18,32 @@ interface ReportWizardProps {
 export function ReportWizard({ onReportGenerated }: ReportWizardProps) {
   const [selectedTransactionFiles, setSelectedTransactionFiles] = useState<string[]>([])
   const [selectedNxnFile, setSelectedNxnFile] = useState<string>("")
-  const [reportName, setReportName] = useState<string>("")
+  const [advertiser, setAdvertiser] = useState<string>("")
+  const [campaign, setCampaign] = useState<string>("")
+  const [openField, setOpenField] = useState<string>("")
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string>("")
   const [uploadedFiles, setUploadedFiles] = useState<any[]>([])
   const [activeSection, setActiveSection] = useState<"upload" | "select">("upload")
+
+  // Generate report name based on naming convention: MM.DD.YY_Advertiser_Campaign_Dashboard Line Item Performance Report_(open field)
+  const generateReportName = () => {
+    const now = new Date()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    const year = String(now.getFullYear()).slice(-2)
+    const dateStr = `${month}.${day}.${year}`
+
+    const parts = [
+      dateStr,
+      advertiser.trim() || '',
+      campaign.trim() || '',
+      'Dashboard Line Item Performance Report',
+      openField.trim() || ''
+    ].filter(part => part !== '')
+
+    return parts.join('_')
+  }
 
   const fetchFiles = async () => {
     try {
@@ -74,12 +95,12 @@ export function ReportWizard({ onReportGenerated }: ReportWizardProps) {
   }
 
   const canProcess = () => {
-    return selectedTransactionFiles.length > 0 && selectedNxnFile !== "" && reportName.trim() !== ""
+    return selectedTransactionFiles.length > 0 && selectedNxnFile !== "" && advertiser.trim() !== "" && campaign.trim() !== ""
   }
 
   const handleProcess = async () => {
-    if (!reportName.trim()) {
-      setError("Please enter a report name")
+    if (!advertiser.trim() || !campaign.trim()) {
+      setError("Please enter Advertiser and Campaign")
       return
     }
 
@@ -92,6 +113,7 @@ export function ReportWizard({ onReportGenerated }: ReportWizardProps) {
     setError("")
 
     try {
+      const reportName = generateReportName()
       const response = await fetch("/api/process", {
         method: "POST",
         headers: {
@@ -100,7 +122,7 @@ export function ReportWizard({ onReportGenerated }: ReportWizardProps) {
         body: JSON.stringify({
           transactionFileIds: selectedTransactionFiles,
           nxnFileId: selectedNxnFile,
-          reportName: reportName.trim(),
+          reportName: reportName,
         }),
       })
 
@@ -112,7 +134,9 @@ export function ReportWizard({ onReportGenerated }: ReportWizardProps) {
       // Success - reset wizard and refresh reports list
       setSelectedTransactionFiles([])
       setSelectedNxnFile("")
-      setReportName("")
+      setAdvertiser("")
+      setCampaign("")
+      setOpenField("")
       setActiveSection("upload")
       onReportGenerated()
     } catch (err: any) {
@@ -177,17 +201,71 @@ export function ReportWizard({ onReportGenerated }: ReportWizardProps) {
                   </div>
 
                   <div className="space-y-4 pt-4 border-t">
-                    <div className="space-y-2">
-                      <Label htmlFor="reportNameUpload">Report Name</Label>
-                      <Input
-                        id="reportNameUpload"
-                        placeholder="e.g., Q1 2024 Campaign Performance"
-                        value={reportName}
-                        onChange={(e) => setReportName(e.target.value)}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Give your report a descriptive name so you can easily find it later
-                      </p>
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-base font-semibold">Report Name</Label>
+                        <p className="text-xs text-muted-foreground mt-1 mb-3">
+                          Format: MM.DD.YY_Advertiser_Campaign_Dashboard Line Item Performance Report_(optional)
+                        </p>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="dateField">Date (MM.DD.YY)</Label>
+                          <Input
+                            id="dateField"
+                            value={(() => {
+                              const now = new Date()
+                              const month = String(now.getMonth() + 1).padStart(2, '0')
+                              const day = String(now.getDate()).padStart(2, '0')
+                              const year = String(now.getFullYear()).slice(-2)
+                              return `${month}.${day}.${year}`
+                            })()}
+                            disabled
+                            className="bg-muted"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Auto-populated from report creation date
+                          </p>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="advertiserUpload">Advertiser *</Label>
+                          <Input
+                            id="advertiserUpload"
+                            placeholder="Enter advertiser name"
+                            value={advertiser}
+                            onChange={(e) => setAdvertiser(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="campaignUpload">Campaign *</Label>
+                          <Input
+                            id="campaignUpload"
+                            placeholder="Enter campaign name"
+                            value={campaign}
+                            onChange={(e) => setCampaign(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="openFieldUpload">Additional Info (Optional)</Label>
+                          <Input
+                            id="openFieldUpload"
+                            placeholder="Any additional information"
+                            value={openField}
+                            onChange={(e) => setOpenField(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="rounded-md bg-muted p-3">
+                        <p className="text-xs font-medium mb-1">Preview:</p>
+                        <p className="text-sm font-mono text-muted-foreground break-all">
+                          {generateReportName()}
+                        </p>
+                      </div>
                     </div>
 
                     <div className="rounded-md bg-muted p-4 space-y-2">
@@ -226,8 +304,8 @@ export function ReportWizard({ onReportGenerated }: ReportWizardProps) {
                       onClick={async () => {
                         // Use selected files (which are auto-selected on upload) or all uploaded files
                         // Files are already saved with metadata via the upload API
-                        const transactionIds = selectedTransactionFiles.length > 0 
-                          ? selectedTransactionFiles 
+                        const transactionIds = selectedTransactionFiles.length > 0
+                          ? selectedTransactionFiles
                           : transactionFiles.map(f => f.id)
                         const nxnId = selectedNxnFile || (nxnFiles.length > 0 ? nxnFiles[0].id : "")
 
@@ -241,8 +319,8 @@ export function ReportWizard({ onReportGenerated }: ReportWizardProps) {
                           return
                         }
 
-                        if (!reportName.trim()) {
-                          setError("Please enter a report name")
+                        if (!advertiser.trim() || !campaign.trim()) {
+                          setError("Please enter Advertiser and Campaign")
                           return
                         }
 
@@ -252,6 +330,7 @@ export function ReportWizard({ onReportGenerated }: ReportWizardProps) {
                         try {
                           // Files are already saved with metadata (row_count, file_size, etc.) via upload API
                           // The process API will link these files to the report
+                          const reportName = generateReportName()
                           const response = await fetch("/api/process", {
                             method: "POST",
                             headers: {
@@ -260,7 +339,7 @@ export function ReportWizard({ onReportGenerated }: ReportWizardProps) {
                             body: JSON.stringify({
                               transactionFileIds: transactionIds,
                               nxnFileId: nxnId,
-                              reportName: reportName.trim(),
+                              reportName: reportName,
                             }),
                           })
 
@@ -272,7 +351,9 @@ export function ReportWizard({ onReportGenerated }: ReportWizardProps) {
                           // Success - reset wizard and refresh reports list
                           setSelectedTransactionFiles([])
                           setSelectedNxnFile("")
-                          setReportName("")
+                          setAdvertiser("")
+                          setCampaign("")
+                          setOpenField("")
                           onReportGenerated()
                         } catch (err: any) {
                           setError(err.message || "Failed to process files")
@@ -280,7 +361,7 @@ export function ReportWizard({ onReportGenerated }: ReportWizardProps) {
                           setProcessing(false)
                         }
                       }}
-                      disabled={processing || !reportName.trim() || !hasRequiredFiles}
+                      disabled={processing || !advertiser.trim() || !campaign.trim() || !hasRequiredFiles}
                       className="w-full"
                     >
                       {processing ? (
@@ -314,17 +395,71 @@ export function ReportWizard({ onReportGenerated }: ReportWizardProps) {
                   />
 
                   <div className="space-y-4 pt-4 border-t">
-                    <div className="space-y-2">
-                      <Label htmlFor="reportName">Report Name</Label>
-                      <Input
-                        id="reportName"
-                        placeholder="e.g., Q1 2024 Campaign Performance"
-                        value={reportName}
-                        onChange={(e) => setReportName(e.target.value)}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Give your report a descriptive name so you can easily find it later
-                      </p>
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-base font-semibold">Report Name</Label>
+                        <p className="text-xs text-muted-foreground mt-1 mb-3">
+                          Format: MM.DD.YY_Advertiser_Campaign_Dashboard Line Item Performance Report_(optional)
+                        </p>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="dateFieldSelect">Date (MM.DD.YY)</Label>
+                          <Input
+                            id="dateFieldSelect"
+                            value={(() => {
+                              const now = new Date()
+                              const month = String(now.getMonth() + 1).padStart(2, '0')
+                              const day = String(now.getDate()).padStart(2, '0')
+                              const year = String(now.getFullYear()).slice(-2)
+                              return `${month}.${day}.${year}`
+                            })()}
+                            disabled
+                            className="bg-muted"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Auto-populated from report creation date
+                          </p>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="advertiserSelect">Advertiser *</Label>
+                          <Input
+                            id="advertiserSelect"
+                            placeholder="Enter advertiser name"
+                            value={advertiser}
+                            onChange={(e) => setAdvertiser(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="campaignSelect">Campaign *</Label>
+                          <Input
+                            id="campaignSelect"
+                            placeholder="Enter campaign name"
+                            value={campaign}
+                            onChange={(e) => setCampaign(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="openFieldSelect">Additional Info (Optional)</Label>
+                          <Input
+                            id="openFieldSelect"
+                            placeholder="Any additional information"
+                            value={openField}
+                            onChange={(e) => setOpenField(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="rounded-md bg-muted p-3">
+                        <p className="text-xs font-medium mb-1">Preview:</p>
+                        <p className="text-sm font-mono text-muted-foreground break-all">
+                          {generateReportName()}
+                        </p>
+                      </div>
                     </div>
 
                     <div className="rounded-md bg-muted p-4 space-y-2">

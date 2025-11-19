@@ -1,17 +1,16 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
 import { ReportWizard } from "@/components/ReportWizard"
 import { ReportsList } from "@/components/ReportsList"
 import { FilesLibrary } from "@/components/FilesLibrary"
 import { MetricsCards } from "@/components/MetricsCards"
 import { ReportTable } from "@/components/ReportTable"
+import { TopLineItemsRanking } from "@/components/TopLineItemsRanking"
+import { FilterAndSearch } from "@/components/FilterAndSearch"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
 import { Loader2, Plus, ArrowLeft, AlertCircle, User, FileText, Calendar, Download, Share2, Copy, Check } from "lucide-react"
 import { ExportButtons } from "@/components/ExportButtons"
 import type { ProcessedLineItem } from "@/components/ReportTable"
@@ -24,12 +23,15 @@ interface ReportData {
   revenueByFile: any[]
 }
 
-export default function ReportsPage() {
-  const { data: session, status } = useSession()
-  const router = useRouter()
+export function LineItemPerformanceReport() {
   const [activeTab, setActiveTab] = useState<"list" | "create" | "view" | "files">("list")
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [viewingReportId, setViewingReportId] = useState<string | null>(null)
+
+  // Shared filter state for both ReportTable and TopLineItemsRanking
+  const [globalSearchTerm, setGlobalSearchTerm] = useState("")
+  const [globalInsertionOrderFilter, setGlobalInsertionOrderFilter] = useState<string[]>([])
+  const [globalAdvertiserFilter, setGlobalAdvertiserFilter] = useState<string[]>([])
   const [viewingReportMeta, setViewingReportMeta] = useState<{
     name?: string
     author_name?: string
@@ -54,12 +56,6 @@ export default function ReportsPage() {
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [shareUrl, setShareUrl] = useState<string>("")
   const [copied, setCopied] = useState(false)
-
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login")
-    }
-  }, [status, router])
 
   const handleDownloadFile = (fileId: string, fileName: string) => {
     const downloadUrl = `/api/upload?id=${fileId}&download=true`
@@ -175,20 +171,8 @@ export default function ReportsPage() {
     }
   }
 
-  if (status === "loading") {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    )
-  }
-
-  if (!session) {
-    return null
-  }
-
   return (
-    <div className="container mx-auto py-8 space-y-8">
+    <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold">Dashboard Transactions Line Item Performance Report</h1>
         <p className="text-muted-foreground mt-2">
@@ -410,13 +394,49 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
-              <MetricsCards summary={reportData.summary} />
+              {/* Summary Metrics */}
+              <div>
+                <h2 className="text-2xl font-bold mb-4">Summary Metrics</h2>
+                <MetricsCards summary={reportData.summary} />
+              </div>
 
+              {/* Filter & Search */}
+              <FilterAndSearch
+                data={reportData.results}
+                searchTerm={globalSearchTerm}
+                onSearchChange={setGlobalSearchTerm}
+                insertionOrderFilter={globalInsertionOrderFilter}
+                onInsertionOrderFilterChange={setGlobalInsertionOrderFilter}
+                advertiserFilter={globalAdvertiserFilter}
+                onAdvertiserFilterChange={setGlobalAdvertiserFilter}
+              />
+
+              {/* Top Performing Line Items */}
+              <div>
+                <h2 className="text-2xl font-bold mb-4">Top Performing Line Items</h2>
+                <TopLineItemsRanking
+                  data={reportData.results}
+                  topCount={10}
+                  globalSearch={globalSearchTerm}
+                  insertionOrderFilter={globalInsertionOrderFilter}
+                />
+              </div>
+
+              {/* Line Item Performance Table */}
+              <ReportTable
+                data={reportData.results}
+                searchTerm={globalSearchTerm}
+                onSearchChange={setGlobalSearchTerm}
+                insertionOrderFilter={globalInsertionOrderFilter}
+                onInsertionOrderFilterChange={setGlobalInsertionOrderFilter}
+                advertiserFilter={globalAdvertiserFilter}
+                onAdvertiserFilterChange={setGlobalAdvertiserFilter}
+              />
+
+              {/* Export Buttons */}
               <div className="flex justify-end">
                 <ExportButtons data={reportData.results} />
               </div>
-
-              <ReportTable data={reportData.results} />
 
               {reportData.unmatchedNxn.length > 0 && (
                 <Card>

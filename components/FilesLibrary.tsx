@@ -1,10 +1,26 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, FileText, Trash2, Calendar, Download, Filter } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Loader2, FileText, Trash2, Calendar, Download, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,7 +31,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { format } from "date-fns"
 
 interface File {
@@ -33,11 +48,19 @@ interface FilesLibraryProps {
   selectMode?: boolean
 }
 
+type SortField = "fileName" | "createdAt" | "fileSize" | "rowCount"
+type SortOrder = "asc" | "desc"
+
 export function FilesLibrary({ onFileSelect, selectedFileIds = [], selectMode = false }: FilesLibraryProps) {
   const [files, setFiles] = useState<File[]>([])
   const [loading, setLoading] = useState(true)
-  const [filterType, setFilterType] = useState<"all" | "transaction" | "nxn_lookup">("all")
   const [fileToDelete, setFileToDelete] = useState<string | null>(null)
+
+  // Filter and sort state
+  const [searchQuery, setSearchQuery] = useState("")
+  const [dateFilter, setDateFilter] = useState<string>("all") // "all", "today", "week", "month", "year"
+  const [sortField, setSortField] = useState<SortField>("createdAt")
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc")
 
   const fetchFiles = async () => {
     try {
@@ -91,12 +114,235 @@ export function FilesLibrary({ onFileSelect, selectedFileIds = [], selectMode = 
     document.body.removeChild(link)
   }
 
-  const filteredFiles = filterType === "all" 
-    ? files 
-    : files.filter((f) => f.fileType === filterType)
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+    } else {
+      setSortField(field)
+      setSortOrder("desc")
+    }
+  }
 
-  const transactionFiles = filteredFiles.filter((f) => f.fileType === "transaction")
-  const nxnFiles = filteredFiles.filter((f) => f.fileType === "nxn_lookup")
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="h-4 w-4 opacity-50" />
+    }
+    return sortOrder === "asc" ? (
+      <ArrowUp className="h-4 w-4" />
+    ) : (
+      <ArrowDown className="h-4 w-4" />
+    )
+  }
+
+  // Filter and sort logic
+  const filteredAndSortedFiles = useMemo(() => {
+    let filtered = [...files]
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      filtered = filtered.filter((file) =>
+        file.fileName.toLowerCase().includes(query)
+      )
+    }
+
+    // Filter by date
+    if (dateFilter !== "all") {
+      const now = new Date()
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+
+      filtered = filtered.filter((file) => {
+        const fileDate = new Date(file.createdAt)
+
+        switch (dateFilter) {
+          case "today":
+            return fileDate >= today
+          case "week":
+            const weekAgo = new Date(today)
+            weekAgo.setDate(weekAgo.getDate() - 7)
+            return fileDate >= weekAgo
+          case "month":
+            const monthAgo = new Date(today)
+            monthAgo.setMonth(monthAgo.getMonth() - 1)
+            return fileDate >= monthAgo
+          case "year":
+            const yearAgo = new Date(today)
+            yearAgo.setFullYear(yearAgo.getFullYear() - 1)
+            return fileDate >= yearAgo
+          default:
+            return true
+        }
+      })
+    }
+
+    // Sort
+    filtered.sort((a, b) => {
+      let aVal: any
+      let bVal: any
+
+      switch (sortField) {
+        case "fileName":
+          aVal = a.fileName.toLowerCase()
+          bVal = b.fileName.toLowerCase()
+          break
+        case "createdAt":
+          aVal = new Date(a.createdAt).getTime()
+          bVal = new Date(b.createdAt).getTime()
+          break
+        case "fileSize":
+          aVal = a.fileSize
+          bVal = b.fileSize
+          break
+        case "rowCount":
+          aVal = a.rowCount ?? 0
+          bVal = b.rowCount ?? 0
+          break
+        default:
+          return 0
+      }
+
+      if (aVal < bVal) return sortOrder === "asc" ? -1 : 1
+      if (aVal > bVal) return sortOrder === "asc" ? 1 : -1
+      return 0
+    })
+
+    return filtered
+  }, [files, searchQuery, dateFilter, sortField, sortOrder])
+
+  const transactionFiles = filteredAndSortedFiles.filter((f) => f.fileType === "transaction")
+  const nxnFiles = filteredAndSortedFiles.filter((f) => f.fileType === "nxn_lookup")
+
+  const FileList = ({ files, type }: { files: File[]; type: "transaction" | "nxn_lookup" }) => {
+    if (files.length === 0) {
+      return (
+        <div className="text-center py-8 text-sm text-muted-foreground">
+          No {type === "transaction" ? "transaction" : "NXN lookup"} files found
+        </div>
+      )
+    }
+
+    return (
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {selectMode && <TableHead className="w-[120px]">Select</TableHead>}
+              <TableHead className="w-[50px]"></TableHead>
+              <TableHead>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 -ml-3"
+                  onClick={() => handleSort("fileName")}
+                >
+                  File Name
+                  {getSortIcon("fileName")}
+                </Button>
+              </TableHead>
+              <TableHead>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 -ml-3"
+                  onClick={() => handleSort("rowCount")}
+                >
+                  Rows
+                  {getSortIcon("rowCount")}
+                </Button>
+              </TableHead>
+              <TableHead>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 -ml-3"
+                  onClick={() => handleSort("fileSize")}
+                >
+                  Size
+                  {getSortIcon("fileSize")}
+                </Button>
+              </TableHead>
+              <TableHead>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 -ml-3"
+                  onClick={() => handleSort("createdAt")}
+                >
+                  Upload Date
+                  {getSortIcon("createdAt")}
+                </Button>
+              </TableHead>
+              <TableHead className="w-[100px] text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {files.map((file) => (
+              <TableRow
+                key={file.id}
+                className={selectedFileIds.includes(file.id) ? "bg-primary/5" : ""}
+              >
+                {selectMode && (
+                  <TableCell>
+                    <Button
+                      variant={selectedFileIds.includes(file.id) ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => onFileSelect?.(file.id, file.fileType)}
+                    >
+                      {selectedFileIds.includes(file.id) ? "Selected" : "Select"}
+                    </Button>
+                  </TableCell>
+                )}
+                <TableCell>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-col">
+                    <span className="font-medium">{file.fileName}</span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  {file.rowCount !== undefined && file.rowCount !== null
+                    ? file.rowCount.toLocaleString()
+                    : "—"}
+                </TableCell>
+                <TableCell>{formatFileSize(file.fileSize)}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1 text-muted-foreground">
+                    <Calendar className="h-3 w-3" />
+                    {format(new Date(file.createdAt), "MMM d, yyyy")}
+                  </div>
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => handleDownload(file.id, file.fileName)}
+                      title="Download file"
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                    {!selectMode && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={() => setFileToDelete(file.id)}
+                        title="Delete file"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    )
+  }
 
   if (loading) {
     return (
@@ -107,233 +353,82 @@ export function FilesLibrary({ onFileSelect, selectedFileIds = [], selectMode = 
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-bold">Files Library</h2>
           <p className="text-sm text-muted-foreground mt-1">
             Manage your uploaded files. Files are saved with all metadata for reuse.
           </p>
         </div>
-        {!selectMode && (
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value as typeof filterType)}
-              className="px-3 py-1 border rounded-md text-sm"
-            >
-              <option value="all">All Files</option>
-              <option value="transaction">Transaction Files</option>
-              <option value="nxn_lookup">NXN Lookup Files</option>
-            </select>
-          </div>
-        )}
+
+      {/* Filter and Search Controls */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Filter & Sort</CardTitle>
+          <CardDescription>Filter files by date, search by name, and sort columns</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-3">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search files by name..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
       </div>
 
-      {selectMode ? (
-        <Tabs defaultValue="transaction" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="transaction">
-              Transaction Files ({transactionFiles.length})
-            </TabsTrigger>
-            <TabsTrigger value="nxn_lookup">
-              NXN Lookup Files ({nxnFiles.length})
-            </TabsTrigger>
-          </TabsList>
+            {/* Date Filter */}
+            <Select value={dateFilter} onValueChange={setDateFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by date" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Dates</SelectItem>
+                <SelectItem value="today">Today</SelectItem>
+                <SelectItem value="week">Last 7 Days</SelectItem>
+                <SelectItem value="month">Last 30 Days</SelectItem>
+                <SelectItem value="year">Last Year</SelectItem>
+              </SelectContent>
+            </Select>
 
-          <TabsContent value="transaction" className="space-y-2">
-            {transactionFiles.length === 0 ? (
-              <Card>
-                <CardContent className="pt-6">
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No transaction files uploaded yet
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-2">
-                {transactionFiles.map((file) => (
-                  <Card
-                    key={file.id}
-                    className={`cursor-pointer transition-colors ${
-                      selectedFileIds.includes(file.id)
-                        ? "border-primary bg-primary/5"
-                        : "hover:bg-muted/50"
-                    }`}
-                    onClick={() => onFileSelect?.(file.id, file.fileType)}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 flex-1">
-                          <FileText className="h-5 w-5 text-muted-foreground" />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">{file.fileName}</p>
-                            <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                              <span>{formatFileSize(file.fileSize)}</span>
-                              {file.rowCount !== undefined && file.rowCount !== null && (
-                                <span>• {file.rowCount.toLocaleString()} rows</span>
-                              )}
-                              <span>• {format(new Date(file.createdAt), "MMM d, yyyy")}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleDownload(file.id, file.fileName)
-                            }}
-                            title="Download file"
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                          {selectedFileIds.includes(file.id) && (
-                            <Badge variant="default" className="ml-2">Selected</Badge>
-                          )}
+            {/* Results Count */}
+            <div className="flex items-center justify-end text-sm text-muted-foreground">
+              Showing {filteredAndSortedFiles.length} of {files.length} files
                         </div>
                       </div>
                     </CardContent>
                   </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
 
-          <TabsContent value="nxn_lookup" className="space-y-2">
-            {nxnFiles.length === 0 ? (
-              <Card>
-                <CardContent className="pt-6">
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No NXN lookup files uploaded yet
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-2">
-                {nxnFiles.map((file) => (
-                  <Card
-                    key={file.id}
-                    className={`cursor-pointer transition-colors ${
-                      selectedFileIds.includes(file.id)
-                        ? "border-primary bg-primary/5"
-                        : "hover:bg-muted/50"
-                    }`}
-                    onClick={() => onFileSelect?.(file.id, file.fileType)}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 flex-1">
-                          <FileText className="h-5 w-5 text-muted-foreground" />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">{file.fileName}</p>
-                            <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                              <span>{formatFileSize(file.fileSize)}</span>
-                              {file.rowCount !== undefined && file.rowCount !== null && (
-                                <span>• {file.rowCount.toLocaleString()} rows</span>
-                              )}
-                              <span>• {format(new Date(file.createdAt), "MMM d, yyyy")}</span>
+      {/* Transaction Reports Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-xl font-semibold">Transaction Reports</h3>
+            <p className="text-sm text-muted-foreground">
+              {transactionFiles.length} file{transactionFiles.length !== 1 ? "s" : ""}
+            </p>
                             </div>
                           </div>
+        <FileList files={transactionFiles} type="transaction" />
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleDownload(file.id, file.fileName)
-                            }}
-                            title="Download file"
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                          {selectedFileIds.includes(file.id) && (
-                            <Badge variant="default" className="ml-2">Selected</Badge>
-                          )}
+
+      {/* NXN Lookup Reports Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-xl font-semibold">NXN Lookup Reports</h3>
+            <p className="text-sm text-muted-foreground">
+              {nxnFiles.length} file{nxnFiles.length !== 1 ? "s" : ""}
+            </p>
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
-      ) : (
-        <>
-          {filteredFiles.length === 0 ? (
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No files uploaded yet
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredFiles.map((file) => (
-                <Card key={file.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-2 flex-1 min-w-0">
-                        <FileText className="h-5 w-5 text-muted-foreground mt-0.5 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <CardTitle className="text-sm truncate">{file.fileName}</CardTitle>
-                          <CardDescription className="mt-1">
-                            <Badge variant="secondary" className="text-xs">
-                              {file.fileType === "transaction" ? "Transaction" : "NXN Lookup"}
-                            </Badge>
-                          </CardDescription>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 flex-shrink-0"
-                          onClick={() => handleDownload(file.id, file.fileName)}
-                          title="Download file"
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 flex-shrink-0"
-                          onClick={() => setFileToDelete(file.id)}
-                          title="Delete file"
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pt-0 space-y-2">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {format(new Date(file.createdAt), "MMM d, yyyy")}
-                      </div>
-                      <span>{formatFileSize(file.fileSize)}</span>
-                    </div>
-                    {file.rowCount !== undefined && file.rowCount !== null && (
-                      <div className="text-xs text-muted-foreground">
-                        {file.rowCount.toLocaleString()} rows
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+        <FileList files={nxnFiles} type="nxn_lookup" />
             </div>
-          )}
-        </>
-      )}
 
+      {/* Delete Confirmation Dialog */}
       <AlertDialog open={fileToDelete !== null} onOpenChange={(open) => !open && setFileToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -357,4 +452,3 @@ export function FilesLibrary({ onFileSelect, selectedFileIds = [], selectMode = 
     </div>
   )
 }
-

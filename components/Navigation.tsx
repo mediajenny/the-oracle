@@ -18,6 +18,9 @@ export function Navigation() {
         <div className="flex items-center gap-4">
           {session ? (
             <>
+              <Link href="/dashboard">
+                <Button variant="ghost">Dashboard</Button>
+              </Link>
               <Link href="/reports">
                 <Button variant="ghost">Reports</Button>
               </Link>
@@ -54,4 +57,3 @@ export function Navigation() {
     </nav>
   )
 }
-

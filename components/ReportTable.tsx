@@ -9,7 +9,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -19,9 +18,8 @@ import {
 } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ArrowUpDown, ArrowUp, ArrowDown, Search, Filter, X, ChevronLeft, ChevronRight } from "lucide-react"
+import { ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Badge } from "@/components/ui/badge"
 
 export interface ProcessedLineItem {
   LINEITEMID: string
@@ -42,6 +40,12 @@ export interface ProcessedLineItem {
 
 interface ReportTableProps {
   data: ProcessedLineItem[]
+  searchTerm?: string
+  onSearchChange?: (value: string) => void
+  insertionOrderFilter?: string[]
+  onInsertionOrderFilterChange?: (value: string[]) => void
+  advertiserFilter?: string[]
+  onAdvertiserFilterChange?: (value: string[]) => void
 }
 
 const COLUMN_CONFIG = [
@@ -55,24 +59,40 @@ const COLUMN_CONFIG = [
   { key: "Unique Transaction Count", label: "Transactions", searchable: false, defaultVisible: true },
   { key: "Total Transaction Amount", label: "Revenue", searchable: false, defaultVisible: true },
   { key: "NXN Impressions", label: "Impressions", searchable: false, defaultVisible: true },
-  { key: "NXN Spend", label: "Spend", searchable: false, defaultVisible: true },
+  { key: "NXN Spend", label: "DSP Spend", searchable: false, defaultVisible: true },
   { key: "Influenced ROAS (Not Deduplicated)", label: "Influenced ROAS", searchable: false, defaultVisible: true },
   { key: "Transaction IDs", label: "Transaction IDs", searchable: true, defaultVisible: false },
 ] as const
 
 const ITEMS_PER_PAGE = 50
 
-export function ReportTable({ data }: ReportTableProps) {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [insertionOrderFilter, setInsertionOrderFilter] = useState<string[]>([])
-  const [advertiserFilter, setAdvertiserFilter] = useState<string[]>([])
+export function ReportTable({
+  data,
+  searchTerm: externalSearchTerm,
+  onSearchChange: onExternalSearchChange,
+  insertionOrderFilter: externalInsertionOrderFilter,
+  onInsertionOrderFilterChange: onExternalInsertionOrderFilterChange,
+  advertiserFilter: externalAdvertiserFilter,
+  onAdvertiserFilterChange: onExternalAdvertiserFilterChange,
+}: ReportTableProps) {
+  // Use external filters if provided, otherwise use internal state
+  const [internalSearchTerm, setInternalSearchTerm] = useState("")
+  const [internalInsertionOrderFilter, setInternalInsertionOrderFilter] = useState<string[]>([])
+  const [internalAdvertiserFilter, setInternalAdvertiserFilter] = useState<string[]>([])
+
+  const searchTerm = externalSearchTerm !== undefined ? externalSearchTerm : internalSearchTerm
+  const setSearchTerm = onExternalSearchChange || setInternalSearchTerm
+  const insertionOrderFilter = externalInsertionOrderFilter !== undefined ? externalInsertionOrderFilter : internalInsertionOrderFilter
+  const setInsertionOrderFilter = onExternalInsertionOrderFilterChange || setInternalInsertionOrderFilter
+  const advertiserFilter = externalAdvertiserFilter !== undefined ? externalAdvertiserFilter : internalAdvertiserFilter
+  const setAdvertiserFilter = onExternalAdvertiserFilterChange || setInternalAdvertiserFilter
+
   const [sortColumn, setSortColumn] = useState<string>("Total Transaction Amount")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
   const [currentPage, setCurrentPage] = useState(1)
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
     new Set(COLUMN_CONFIG.filter(col => col.defaultVisible).map(col => col.key))
   )
-  const [showFilters, setShowFilters] = useState(false)
 
   // Get unique values for filters
   const uniqueInsertionOrders = useMemo(() => {
@@ -98,9 +118,9 @@ export function ReportTable({ data }: ReportTableProps) {
   // Search across all searchable columns
   const searchInRow = (row: ProcessedLineItem, term: string): boolean => {
     if (!term) return true
-    
+
     const searchLower = term.toLowerCase()
-    
+
     // Search in all searchable columns
     return COLUMN_CONFIG.some(col => {
       if (!col.searchable) return false
@@ -234,214 +254,6 @@ export function ReportTable({ data }: ReportTableProps) {
 
   return (
     <div className="space-y-4">
-      {/* Search and Filter Bar */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Filter & Search</CardTitle>
-              <CardDescription>
-                Search across all columns, filter by insertion order or advertiser
-              </CardDescription>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              <Filter className="h-4 w-4 mr-2" />
-              {showFilters ? "Hide" : "Show"} Filters
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Global Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search across all columns..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value)
-                setCurrentPage(1)
-              }}
-              className="pl-10"
-            />
-            {searchTerm && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6"
-                onClick={() => setSearchTerm("")}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-
-          {showFilters && (
-            <div className="grid gap-4 md:grid-cols-2 pt-4 border-t">
-              {/* Insertion Order Filter */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Insertion Orders</label>
-                <div className="max-h-32 overflow-y-auto border rounded-md p-2 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="io-all"
-                      checked={insertionOrderFilter.length === 0}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          setInsertionOrderFilter([])
-                        } else {
-                          setInsertionOrderFilter(uniqueInsertionOrders)
-                        }
-                      }}
-                    />
-                    <label htmlFor="io-all" className="text-sm cursor-pointer">
-                      All ({uniqueInsertionOrders.length})
-                    </label>
-                  </div>
-                  {uniqueInsertionOrders.map((order) => (
-                    <div key={order} className="flex items-center gap-2">
-                      <Checkbox
-                        id={`io-${order}`}
-                        checked={insertionOrderFilter.includes(order)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setInsertionOrderFilter([...insertionOrderFilter, order])
-                          } else {
-                            setInsertionOrderFilter(
-                              insertionOrderFilter.filter((o) => o !== order)
-                            )
-                          }
-                        }}
-                      />
-                      <label htmlFor={`io-${order}`} className="text-sm cursor-pointer truncate">
-                        {order}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Advertiser Filter */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Advertisers</label>
-                <div className="max-h-32 overflow-y-auto border rounded-md p-2 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="adv-all"
-                      checked={advertiserFilter.length === 0}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          setAdvertiserFilter([])
-                        } else {
-                          setAdvertiserFilter(uniqueAdvertisers)
-                        }
-                      }}
-                    />
-                    <label htmlFor="adv-all" className="text-sm cursor-pointer">
-                      All ({uniqueAdvertisers.length})
-                    </label>
-                  </div>
-                  {uniqueAdvertisers.map((advertiser) => (
-                    <div key={advertiser} className="flex items-center gap-2">
-                      <Checkbox
-                        id={`adv-${advertiser}`}
-                        checked={advertiserFilter.includes(advertiser)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setAdvertiserFilter([...advertiserFilter, advertiser])
-                          } else {
-                            setAdvertiserFilter(
-                              advertiserFilter.filter((a) => a !== advertiser)
-                            )
-                          }
-                        }}
-                      />
-                      <label htmlFor={`adv-${advertiser}`} className="text-sm cursor-pointer truncate">
-                        {advertiser}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Active Filters */}
-          {(insertionOrderFilter.length > 0 || advertiserFilter.length > 0 || searchTerm) && (
-            <div className="flex flex-wrap gap-2 pt-2 border-t">
-              <span className="text-sm text-muted-foreground">Active filters:</span>
-              {searchTerm && (
-                <Badge variant="secondary" className="gap-1">
-                  Search: {searchTerm}
-                  <X
-                    className="h-3 w-3 cursor-pointer"
-                    onClick={() => setSearchTerm("")}
-                  />
-                </Badge>
-              )}
-              {insertionOrderFilter.length > 0 && (
-                <Badge variant="secondary" className="gap-1">
-                  IO: {insertionOrderFilter.length} selected
-                  <X
-                    className="h-3 w-3 cursor-pointer"
-                    onClick={() => setInsertionOrderFilter([])}
-                  />
-                </Badge>
-              )}
-              {advertiserFilter.length > 0 && (
-                <Badge variant="secondary" className="gap-1">
-                  Advertisers: {advertiserFilter.length} selected
-                  <X
-                    className="h-3 w-3 cursor-pointer"
-                    onClick={() => setAdvertiserFilter([])}
-                  />
-                </Badge>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Totals Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Totals</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <div>
-              <div className="text-sm text-muted-foreground">Total Line Items</div>
-              <div className="text-lg font-semibold">{sortedData.length}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">Total Transactions (Duplicated)</div>
-              <div className="text-lg font-semibold">{formatNumber(totals["Unique Transaction Count"])}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">Total Revenue (Duplicated)</div>
-              <div className="text-lg font-semibold">{formatCurrency(totals["Total Transaction Amount"])}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">Total Impressions</div>
-              <div className="text-lg font-semibold">{formatNumber(totals["NXN Impressions"])}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">Total Spend</div>
-              <div className="text-lg font-semibold">{formatCurrency(totals["NXN Spend"])}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">Overall Influenced ROAS</div>
-              <div className="text-lg font-semibold">
-                {overallRoas ? overallRoas.toFixed(2) : "N/A"}
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Column Visibility */}
       <Card>
         <CardHeader>
@@ -566,15 +378,15 @@ export function ReportTable({ data }: ReportTableProps) {
                         const numericCols = ["Unique Transaction Count", "Total Transaction Amount", "NXN Impressions", "NXN Spend", "Influenced ROAS (Not Deduplicated)"]
                         const cells: React.ReactNode[] = []
                         let totalsRendered = false
-                        
+
                         visibleColumnsList.forEach((col, idx) => {
                           const isNumeric = numericCols.includes(col.key)
-                          
+
                           // Render "Totals" label spanning all non-numeric columns before first numeric
                           if (!totalsRendered) {
                             const firstNumericIdx = visibleColumnsList.findIndex(c => numericCols.includes(c.key))
                             const nonNumericBeforeFirst = firstNumericIdx >= 0 ? firstNumericIdx : visibleColumnsList.filter(c => !numericCols.includes(c.key)).length
-                            
+
                             if (nonNumericBeforeFirst > 0 && idx === 0) {
                               cells.push(
                                 <TableCell key="totals-label" colSpan={nonNumericBeforeFirst}>
@@ -589,12 +401,12 @@ export function ReportTable({ data }: ReportTableProps) {
                               totalsRendered = true
                             }
                           }
-                          
+
                           // Skip non-numeric columns (covered by colspan)
                           if (!isNumeric) {
                             return
                           }
-                          
+
                           // Render totals for numeric columns
                           if (col.key === "Unique Transaction Count") {
                             cells.push(
@@ -630,7 +442,7 @@ export function ReportTable({ data }: ReportTableProps) {
                             cells.push(<TableCell key={col.key}></TableCell>)
                           }
                         })
-                        
+
                         return cells
                       })()}
                     </TableRow>

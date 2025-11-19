@@ -14,7 +14,7 @@ export default function Home() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      router.push("/reports")
+      router.push("/dashboard")
     }
   }, [status, router])
 
@@ -71,4 +71,3 @@ export default function Home() {
     </div>
   )
 }
-

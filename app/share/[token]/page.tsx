@@ -51,7 +51,7 @@ export default function SharedReportPage() {
       try {
         setLoading(true)
         const response = await fetch(`/api/share/report?token=${token}`)
-        
+
         if (!response.ok) {
           const errorData = await response.json()
           throw new Error(errorData.error || "Failed to load report")
@@ -179,7 +179,7 @@ export default function SharedReportPage() {
                     <th className="p-2 text-left">LINEITEMID</th>
                     <th className="p-2 text-left">NXN Line Item Name</th>
                     <th className="p-2 text-left">NXN Impressions</th>
-                    <th className="p-2 text-left">NXN Spend</th>
+                    <th className="p-2 text-left">DSP Spend</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -207,4 +207,3 @@ export default function SharedReportPage() {
     </div>
   )
 }
-

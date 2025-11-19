@@ -120,21 +120,42 @@ export default function AdminPage() {
   const checkAdmin = async () => {
     try {
       setLoading(true)
+      console.log("[AdminPage] Checking admin access...")
+      console.log("[AdminPage] Session user ID:", session?.user?.id)
+      console.log("[AdminPage] Session user email:", session?.user?.email)
+
       const response = await fetch("/api/admin/users")
+      console.log("[AdminPage] API response status:", response.status)
+
       if (response.status === 403) {
         // Not admin, redirect
-        router.push("/reports")
+        const errorData = await response.json().catch(() => ({}))
+        console.error("[AdminPage] Admin check failed - 403 Forbidden", errorData)
+        console.log("[AdminPage] Session details:", {
+          userId: session?.user?.id,
+          email: session?.user?.email,
+          status: response.status,
+          error: errorData
+        })
+        console.log("[AdminPage] Redirecting to /reports in 3 seconds...")
+        // Add delay so logs are visible before redirect
+        setTimeout(() => {
+          router.push("/reports")
+        }, 3000)
         return
       } else if (response.ok) {
         // Admin confirmed, fetch all data
+        console.log("[AdminPage] Admin access confirmed, fetching data...")
         await fetchData()
       } else {
         // Unexpected error
+        const errorData = await response.json().catch(() => ({}))
+        console.error("[AdminPage] Unexpected error:", response.status, errorData)
         setError("Failed to verify admin access")
         setLoading(false)
       }
     } catch (err) {
-      console.error("Admin check error:", err)
+      console.error("[AdminPage] Admin check error:", err)
       setError("Failed to verify admin access. Please refresh the page.")
       setLoading(false)
     }
@@ -423,7 +444,7 @@ export default function AdminPage() {
   const openPermissionsDialog = async (user: User, team: Team) => {
     setSelectedUser(user)
     setSelectedTeam(team)
-    
+
     try {
       const response = await fetch(`/api/admin/permissions/${user.id}/${team.id}`)
       if (response.ok) {
@@ -433,7 +454,7 @@ export default function AdminPage() {
     } catch (err) {
       console.error("Failed to load permissions:", err)
     }
-    
+
     setPermissionsDialogOpen(true)
   }
 
@@ -486,7 +507,7 @@ export default function AdminPage() {
         <TabsList>
           <TabsTrigger value="users">
             <Users className="mr-2 h-4 w-4" />
-            Users ({users.length})
+            User Management ({users.length})
           </TabsTrigger>
           <TabsTrigger value="teams">
             <Building2 className="mr-2 h-4 w-4" />
@@ -499,7 +520,7 @@ export default function AdminPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Users</CardTitle>
+                  <CardTitle>User Management</CardTitle>
                   <CardDescription>
                     Manage user accounts and roles
                   </CardDescription>

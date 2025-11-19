@@ -59,8 +59,8 @@ export function MetricsCards({ summary }: MetricsCardsProps) {
         <CardContent className="pt-6">
           <div className="text-2xl font-bold">
             {(() => {
-              const spend = typeof summary.totalSpend === "number" 
-                ? summary.totalSpend 
+              const spend = typeof summary.totalSpend === "number"
+                ? summary.totalSpend
                 : parseFloat(String(summary.totalSpend || 0).replace(/[^0-9.-]/g, "")) || 0
               return `$${spend.toLocaleString(undefined, {
                 minimumFractionDigits: 2,
@@ -68,10 +68,10 @@ export function MetricsCards({ summary }: MetricsCardsProps) {
               })}`
             })()}
           </div>
-          <p className="text-xs text-muted-foreground">Total Spend</p>
+          <p className="text-xs text-muted-foreground">Total DSP Spend</p>
           {summary.overallRoas && (
             <p className="text-xs text-muted-foreground mt-1">
-              Overall Influenced ROAS: {typeof summary.overallRoas === "number" 
+              Overall Influenced ROAS: {typeof summary.overallRoas === "number"
                 ? summary.overallRoas.toFixed(2)
                 : parseFloat(String(summary.overallRoas)).toFixed(2)}
             </p>
@@ -81,4 +81,3 @@ export function MetricsCards({ summary }: MetricsCardsProps) {
     </div>
   )
 }
-

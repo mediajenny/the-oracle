@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { uploadFile } from "@/lib/storage"
+import { uploadFile, deleteFile } from "@/lib/storage"
 import { sql } from "@/lib/db"
 import { parseFile } from "@/lib/file-parsers"
 
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     // Upload file (Vercel Blob in production, local filesystem in development)
     let url: string
     let size: number
-    
+
     try {
       const result = await uploadFile(file, session.user.id)
       url = result.url
@@ -67,16 +67,50 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if file has data
+    if (!parsedData.data || parsedData.data.length === 0) {
+      return NextResponse.json(
+        { error: "File appears to be empty or has no data rows" },
+        { status: 400 }
+      )
+    }
+
+    // Helper function to normalize column names (case-insensitive, trim whitespace)
+    const normalizeColumnName = (name: string): string => {
+      return name?.toString().trim().toLowerCase() || ""
+    }
+
+    // Get actual column names from the first row
+    const firstRow = parsedData.data[0]
+    const actualColumns = Object.keys(firstRow || {})
+    const normalizedActualColumns = new Map(
+      actualColumns.map((col) => [normalizeColumnName(col), col])
+    )
+
     // Validate required columns
     if (fileType === "transaction") {
       const requiredColumns = ["Transaction ID", "Transaction Total", "Impressions"]
-      const missingColumns = requiredColumns.filter(
-        (col) => !parsedData.data[0] || !(col in parsedData.data[0])
-      )
+      const missingColumns: string[] = []
+      const foundColumns: string[] = []
+
+      for (const requiredCol of requiredColumns) {
+        const normalized = normalizeColumnName(requiredCol)
+        const found = normalizedActualColumns.has(normalized)
+
+        if (found) {
+          foundColumns.push(requiredCol)
+        } else {
+          missingColumns.push(requiredCol)
+        }
+      }
+
       if (missingColumns.length > 0) {
         return NextResponse.json(
           {
             error: `Missing required columns: ${missingColumns.join(", ")}`,
+            foundColumns: foundColumns,
+            actualColumns: actualColumns.slice(0, 10), // Show first 10 columns
+            hint: "Column names are case-insensitive but must match exactly (including spaces). Found columns: " + actualColumns.join(", "),
           },
           { status: 400 }
         )
@@ -88,13 +122,27 @@ export async function POST(request: NextRequest) {
         "impressions",
         "advertiser_invoice",
       ]
-      const missingColumns = requiredColumns.filter(
-        (col) => !parsedData.data[0] || !(col in parsedData.data[0])
-      )
+      const missingColumns: string[] = []
+      const foundColumns: string[] = []
+
+      for (const requiredCol of requiredColumns) {
+        const normalized = normalizeColumnName(requiredCol)
+        const found = normalizedActualColumns.has(normalized)
+
+        if (found) {
+          foundColumns.push(requiredCol)
+        } else {
+          missingColumns.push(requiredCol)
+        }
+      }
+
       if (missingColumns.length > 0) {
         return NextResponse.json(
           {
             error: `Missing required columns: ${missingColumns.join(", ")}`,
+            foundColumns: foundColumns,
+            actualColumns: actualColumns.slice(0, 10), // Show first 10 columns
+            hint: "Column names are case-insensitive but must match exactly. Found columns: " + actualColumns.join(", "),
           },
           { status: 400 }
         )
@@ -144,13 +192,13 @@ export async function GET(request: NextRequest) {
     if (download && fileId) {
       // Verify ownership or shared access
       const fileResult = await sql`
-        SELECT 
-          uf.id, 
-          uf.file_name, 
-          uf.blob_url, 
+        SELECT
+          uf.id,
+          uf.file_name,
+          uf.blob_url,
           uf.mime_type,
           uf.user_id,
-          CASE 
+          CASE
             WHEN uf.user_id = ${session.user.id} THEN true
             WHEN EXISTS (
               SELECT 1 FROM file_shares fs
@@ -181,7 +229,7 @@ export async function GET(request: NextRequest) {
         const { readFile } = await import("fs/promises")
         const { join } = await import("path")
         const filePath = join(process.cwd(), "public", blobUrl)
-        
+
         try {
           const buffer = await readFile(filePath)
           return new NextResponse(buffer, {
@@ -276,6 +324,16 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
+    const blobUrl = checkResult.rows[0].blob_url
+
+    // Delete physical file (handles both local filesystem and Vercel Blob)
+    try {
+      await deleteFile(blobUrl)
+    } catch (error) {
+      // Log error but continue with database deletion
+      console.warn("Failed to delete physical file:", error)
+    }
+
     // Delete from database
     await sql`
       DELETE FROM uploaded_files
@@ -291,5 +349,3 @@ export async function DELETE(request: NextRequest) {
     )
   }
 }
-
-
