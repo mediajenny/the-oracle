@@ -24,5 +24,9 @@ echo "Database '$DB_NAME' created or already exists"
 echo "Running schema..."
 PGPASSWORD=${PGPASSWORD:-postgres} psql -h $PG_HOST -p $PG_PORT -U $PG_USER -d $DB_NAME -f lib/db/schema.sql
 
+# Apply schema updates (idempotent - safe to run on existing databases)
+echo "Applying schema updates..."
+PGPASSWORD=${PGPASSWORD:-postgres} psql -h $PG_HOST -p $PG_PORT -U $PG_USER -d $DB_NAME -f lib/db/schema-updates.sql 2>&1 | grep -v "already exists" | grep -v "does not exist" || true
+
 echo "Database initialized successfully!"
 

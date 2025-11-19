@@ -47,6 +47,12 @@ psql -h $PG_HOST -p $PG_PORT -U $PG_USER -d $DB_NAME -f lib/db/schema.sql
 echo "✓ Schema applied"
 echo ""
 
+# Step 2.5: Apply any schema updates (idempotent - safe to run on existing databases)
+echo "Step 2.5: Applying schema updates..."
+psql -h $PG_HOST -p $PG_PORT -U $PG_USER -d $DB_NAME -f lib/db/schema-updates.sql 2>&1 | grep -v "already exists" | grep -v "does not exist" || true
+echo "✓ Schema updates applied"
+echo ""
+
 # Step 3: Seed users (using psql script for local Postgres)
 echo "Step 3: Seeding test users..."
 if command -v node &> /dev/null && command -v psql &> /dev/null; then

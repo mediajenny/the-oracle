@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   name VARCHAR(255),
   team_id UUID REFERENCES teams(id) ON DELETE SET NULL,
+  role VARCHAR(50) DEFAULT 'member', -- Roles: 'admin', 'team_admin', 'member'
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -74,16 +75,59 @@ CREATE TABLE IF NOT EXISTS report_shares (
   )
 );
 
+-- User team permissions table for granular permissions
+CREATE TABLE IF NOT EXISTS user_team_permissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  can_view_reports BOOLEAN DEFAULT true,
+  can_create_reports BOOLEAN DEFAULT true,
+  can_edit_reports BOOLEAN DEFAULT false,
+  can_delete_reports BOOLEAN DEFAULT false,
+  can_upload_files BOOLEAN DEFAULT true,
+  can_delete_files BOOLEAN DEFAULT false,
+  can_share_files BOOLEAN DEFAULT true,
+  can_manage_team BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, team_id)
+);
+
 -- Indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_team_id ON users(team_id);
 CREATE INDEX IF NOT EXISTS idx_uploaded_files_user_id ON uploaded_files(user_id);
 CREATE INDEX IF NOT EXISTS idx_uploaded_files_file_type ON uploaded_files(file_type);
 CREATE INDEX IF NOT EXISTS idx_reports_user_id ON reports(user_id);
+CREATE INDEX IF NOT EXISTS idx_reports_share_token ON reports(share_token) WHERE share_token IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_file_shares_file_id ON file_shares(file_id);
 CREATE INDEX IF NOT EXISTS idx_file_shares_shared_with_user_id ON file_shares(shared_with_user_id);
 CREATE INDEX IF NOT EXISTS idx_file_shares_shared_with_team_id ON file_shares(shared_with_team_id);
 CREATE INDEX IF NOT EXISTS idx_report_shares_report_id ON report_shares(report_id);
 CREATE INDEX IF NOT EXISTS idx_report_shares_shared_with_user_id ON report_shares(shared_with_user_id);
 CREATE INDEX IF NOT EXISTS idx_report_shares_shared_with_team_id ON report_shares(shared_with_team_id);
+CREATE INDEX IF NOT EXISTS idx_user_team_permissions_user_id ON user_team_permissions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_team_permissions_team_id ON user_team_permissions(team_id);
+
+-- Add updated_at trigger function
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Add triggers for updated_at
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_teams_updated_at ON teams;
+CREATE TRIGGER update_teams_updated_at BEFORE UPDATE ON teams
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_user_team_permissions_updated_at ON user_team_permissions;
+CREATE TRIGGER update_user_team_permissions_updated_at BEFORE UPDATE ON user_team_permissions
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
