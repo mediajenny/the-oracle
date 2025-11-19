@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Plus, ArrowLeft, AlertCircle, User, FileText, Calendar } from "lucide-react"
+import { Loader2, Plus, ArrowLeft, AlertCircle, User, FileText, Calendar, Download, Share2, Copy, Check } from "lucide-react"
 import { ExportButtons } from "@/components/ExportButtons"
 import type { ProcessedLineItem } from "@/components/ReportTable"
 import { format } from "date-fns"
@@ -35,6 +35,7 @@ export default function ReportsPage() {
     author_name?: string
     author_email?: string
     created_at?: string
+    share_token?: string
     transaction_files?: Array<{
       id: string
       file_name: string
@@ -51,12 +52,92 @@ export default function ReportsPage() {
     }
   } | null>(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [shareUrl, setShareUrl] = useState<string>("")
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login")
     }
   }, [status, router])
+
+  const handleDownloadFile = (fileId: string, fileName: string) => {
+    const downloadUrl = `/api/upload?id=${fileId}&download=true`
+    const link = document.createElement("a")
+    link.href = downloadUrl
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const fetchShareLink = async (reportId: string) => {
+    try {
+      const response = await fetch(`/api/reports/${reportId}/share`)
+      if (!response.ok) {
+        throw new Error("Failed to get share link")
+      }
+      const data = await response.json()
+      setShareUrl(data.shareUrl)
+      setViewingReportMeta((prev) => ({
+        ...prev,
+        share_token: data.shareToken,
+      }))
+    } catch (error) {
+      console.error("Failed to fetch share link:", error)
+    }
+  }
+
+  const handleCopyShareLink = async () => {
+    let urlToCopy = shareUrl
+    
+    if (!urlToCopy && viewingReportId) {
+      try {
+        const response = await fetch(`/api/reports/${viewingReportId}/share`)
+        if (!response.ok) {
+          throw new Error("Failed to get share link")
+        }
+        const data = await response.json()
+        urlToCopy = data.shareUrl
+        setShareUrl(urlToCopy)
+        setViewingReportMeta((prev) => ({
+          ...prev,
+          share_token: data.shareToken,
+        }))
+      } catch (error) {
+        console.error("Failed to fetch share link:", error)
+        alert("Failed to generate share link")
+        return
+      }
+    }
+
+    if (urlToCopy) {
+      await navigator.clipboard.writeText(urlToCopy)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  const handleRevokeShareLink = async () => {
+    if (!viewingReportId) return
+
+    try {
+      const response = await fetch(`/api/reports/${viewingReportId}/share`, {
+        method: "DELETE",
+      })
+      if (!response.ok) {
+        throw new Error("Failed to revoke share link")
+      }
+      setShareUrl("")
+      setViewingReportMeta((prev) => ({
+        ...prev,
+        share_token: undefined,
+      }))
+    } catch (error) {
+      console.error("Failed to revoke share link:", error)
+      alert("Failed to revoke share link")
+    }
+  }
 
   const handleReportGenerated = () => {
     setRefreshTrigger((prev) => prev + 1)
@@ -76,11 +157,18 @@ export default function ReportsPage() {
         author_name: data.report.author_name,
         author_email: data.report.author_email,
         created_at: data.report.created_at,
+        share_token: data.report.share_token,
         transaction_files: data.report.transaction_files || [],
         nxn_file: data.report.nxn_file,
       })
       setViewingReportId(reportId)
       setActiveTab("view")
+      
+      // Fetch share link if token exists
+      if (data.report.share_token) {
+        const baseUrl = window.location.origin
+        setShareUrl(`${baseUrl}/share/${data.report.share_token}`)
+      }
     } catch (error) {
       console.error("Failed to load report:", error)
       alert("Failed to load report. Please try again.")
@@ -150,7 +238,7 @@ export default function ReportsPage() {
                   <Card>
                     <CardHeader>
                       <div className="flex items-center justify-between">
-                        <div>
+                        <div className="flex-1">
                           <CardTitle>{viewingReportMeta.name || "Report"}</CardTitle>
                           <CardDescription className="mt-2">
                             <div className="flex items-center gap-4 text-sm">
@@ -175,6 +263,57 @@ export default function ReportsPage() {
                               )}
                             </div>
                           </CardDescription>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {shareUrl ? (
+                            <>
+                              <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-muted/50 max-w-md">
+                                  <input
+                                    type="text"
+                                    readOnly
+                                    value={shareUrl}
+                                    className="flex-1 bg-transparent text-sm outline-none"
+                                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                                  />
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={handleCopyShareLink}
+                                    title="Copy share link"
+                                  >
+                                    {copied ? (
+                                      <Check className="h-4 w-4 text-green-600" />
+                                    ) : (
+                                      <Copy className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  Recipients must be logged in to view this report
+                                </p>
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleRevokeShareLink}
+                                title="Revoke share link"
+                              >
+                                Revoke
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => viewingReportId && fetchShareLink(viewingReportId)}
+                              title="Generate share link"
+                            >
+                              <Share2 className="mr-2 h-4 w-4" />
+                              Share Report
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </CardHeader>
@@ -211,6 +350,15 @@ export default function ReportsPage() {
                                       </div>
                                     </div>
                                   </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 flex-shrink-0"
+                                    onClick={() => handleDownloadFile(file.id, file.file_name)}
+                                    title="Download file"
+                                  >
+                                    <Download className="h-4 w-4" />
+                                  </Button>
                                 </div>
                               ))}
                             </div>
@@ -234,6 +382,15 @@ export default function ReportsPage() {
                                   </div>
                                 </div>
                               </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 flex-shrink-0"
+                                onClick={() => handleDownloadFile(viewingReportMeta.nxn_file.id, viewingReportMeta.nxn_file.file_name)}
+                                title="Download file"
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
                             </div>
                           </div>
                         )}

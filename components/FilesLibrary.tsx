@@ -81,6 +81,16 @@ export function FilesLibrary({ onFileSelect, selectedFileIds = [], selectMode = 
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
+  const handleDownload = (fileId: string, fileName: string) => {
+    const downloadUrl = `/api/upload?id=${fileId}&download=true`
+    const link = document.createElement("a")
+    link.href = downloadUrl
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   const filteredFiles = filterType === "all" 
     ? files 
     : files.filter((f) => f.fileType === filterType)
@@ -168,9 +178,23 @@ export function FilesLibrary({ onFileSelect, selectedFileIds = [], selectMode = 
                             </div>
                           </div>
                         </div>
-                        {selectedFileIds.includes(file.id) && (
-                          <Badge variant="default" className="ml-2">Selected</Badge>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDownload(file.id, file.fileName)
+                            }}
+                            title="Download file"
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                          {selectedFileIds.includes(file.id) && (
+                            <Badge variant="default" className="ml-2">Selected</Badge>
+                          )}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -215,9 +239,23 @@ export function FilesLibrary({ onFileSelect, selectedFileIds = [], selectMode = 
                             </div>
                           </div>
                         </div>
-                        {selectedFileIds.includes(file.id) && (
-                          <Badge variant="default" className="ml-2">Selected</Badge>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDownload(file.id, file.fileName)
+                            }}
+                            title="Download file"
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                          {selectedFileIds.includes(file.id) && (
+                            <Badge variant="default" className="ml-2">Selected</Badge>
+                          )}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -253,14 +291,26 @@ export function FilesLibrary({ onFileSelect, selectedFileIds = [], selectMode = 
                           </CardDescription>
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 flex-shrink-0"
-                        onClick={() => setFileToDelete(file.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 flex-shrink-0"
+                          onClick={() => handleDownload(file.id, file.fileName)}
+                          title="Download file"
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 flex-shrink-0"
+                          onClick={() => setFileToDelete(file.id)}
+                          title="Delete file"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="pt-0 space-y-2">

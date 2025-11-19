@@ -136,7 +136,79 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const fileType = request.nextUrl.searchParams.get("fileType")
+    const { searchParams } = new URL(request.url)
+    const fileId = searchParams.get("id")
+    const download = searchParams.get("download") === "true"
+
+    // If download=true, serve the file
+    if (download && fileId) {
+      // Verify ownership or shared access
+      const fileResult = await sql`
+        SELECT 
+          uf.id, 
+          uf.file_name, 
+          uf.blob_url, 
+          uf.mime_type,
+          uf.user_id,
+          CASE 
+            WHEN uf.user_id = ${session.user.id} THEN true
+            WHEN EXISTS (
+              SELECT 1 FROM file_shares fs
+              WHERE fs.file_id = uf.id
+              AND (
+                fs.shared_with_user_id = ${session.user.id}
+                OR (fs.shared_with_team_id = ${session.user.teamId} AND ${session.user.teamId} IS NOT NULL)
+              )
+            ) THEN true
+            ELSE false
+          END as has_access
+        FROM uploaded_files uf
+        WHERE uf.id = ${fileId}
+      `
+
+      if (fileResult.rows.length === 0 || !fileResult.rows[0].has_access) {
+        return NextResponse.json(
+          { error: "File not found or access denied" },
+          { status: 404 }
+        )
+      }
+
+      const file = fileResult.rows[0]
+      const blobUrl = file.blob_url
+
+      // Handle local filesystem files
+      if (blobUrl.startsWith("/uploads/")) {
+        const { readFile } = await import("fs/promises")
+        const { join } = await import("path")
+        const filePath = join(process.cwd(), "public", blobUrl)
+        
+        try {
+          const buffer = await readFile(filePath)
+          return new NextResponse(buffer, {
+            headers: {
+              "Content-Type": file.mime_type || "application/octet-stream",
+              "Content-Disposition": `attachment; filename="${file.file_name}"`,
+              "Content-Length": buffer.length.toString(),
+            },
+          })
+        } catch (error: any) {
+          if (error.code === "ENOENT") {
+            return NextResponse.json(
+              { error: "File not found on server" },
+              { status: 404 }
+            )
+          }
+          throw error
+        }
+      } else {
+        // Handle Vercel Blob URLs - redirect to the blob URL
+        // The blob URL is already public, so we can redirect directly
+        return NextResponse.redirect(blobUrl)
+      }
+    }
+
+    // Otherwise, return file list (existing GET behavior)
+    const fileType = searchParams.get("fileType")
 
     let query = sql`
       SELECT id, file_name, file_type, blob_url, file_size, row_count, created_at
@@ -166,9 +238,9 @@ export async function GET(request: NextRequest) {
       })),
     })
   } catch (error: any) {
-    console.error("Get files error:", error)
+    console.error("Get/download file error:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to fetch files" },
+      { error: error.message || "Failed to fetch/download file" },
       { status: 500 }
     )
   }
@@ -219,4 +291,5 @@ export async function DELETE(request: NextRequest) {
     )
   }
 }
+
 

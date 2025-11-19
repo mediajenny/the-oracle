@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
           r.transaction_file_ids,
           r.nxn_file_id,
           r.report_data,
+          r.share_token,
           r.created_at,
           r.updated_at,
           COALESCE(
@@ -55,7 +56,7 @@ export async function GET(request: NextRequest) {
         LEFT JOIN users u ON r.user_id = u.id
         WHERE r.id = ${reportId}
           AND r.user_id = ${session.user.id}
-        GROUP BY r.id, r.name, r.transaction_file_ids, r.nxn_file_id, r.report_data, r.created_at, r.updated_at, 
+        GROUP BY r.id, r.name, r.transaction_file_ids, r.nxn_file_id, r.report_data, r.share_token, r.created_at, r.updated_at, 
                  nxn_file.id, nxn_file.file_name, nxn_file.file_size, nxn_file.row_count, nxn_file.created_at, 
                  u.name, u.email
       `

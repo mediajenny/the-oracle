@@ -51,3 +51,7 @@ CREATE TRIGGER update_user_team_permissions_updated_at BEFORE UPDATE ON user_tea
 -- Add row_count column to uploaded_files if it doesn't exist
 ALTER TABLE uploaded_files ADD COLUMN IF NOT EXISTS row_count INTEGER;
 
+-- Add share_token column to reports table for public sharing
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS share_token VARCHAR(255);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_share_token ON reports(share_token) WHERE share_token IS NOT NULL;
+

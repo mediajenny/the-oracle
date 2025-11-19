@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS reports (
   transaction_file_ids UUID[] NOT NULL, -- Array of uploaded_files IDs
   nxn_file_id UUID NOT NULL REFERENCES uploaded_files(id) ON DELETE CASCADE,
   report_data JSONB, -- Store the processed report data
+  share_token VARCHAR(255) UNIQUE, -- Unique token for public sharing
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

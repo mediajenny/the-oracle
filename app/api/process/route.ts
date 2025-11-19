@@ -137,9 +137,13 @@ export async function POST(request: NextRequest) {
     // Generate default name if not provided
     const finalReportName = reportName?.trim() || `Report ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`
 
+    // Generate unique share token
+    const { randomBytes } = await import("crypto")
+    const shareToken = randomBytes(32).toString("base64url")
+
     // Save report to database
     const reportResult = await sql`
-      INSERT INTO reports (user_id, name, transaction_file_ids, nxn_file_id, report_data)
+      INSERT INTO reports (user_id, name, transaction_file_ids, nxn_file_id, report_data, share_token)
       VALUES (
         ${session.user.id},
         ${finalReportName},
@@ -150,9 +154,10 @@ export async function POST(request: NextRequest) {
           unmatchedNxn,
           summary,
           revenueByFile,
-        })}::jsonb
+        })}::jsonb,
+        ${shareToken}
       )
-      RETURNING id, created_at
+      RETURNING id, created_at, share_token
     `
 
     return NextResponse.json({
