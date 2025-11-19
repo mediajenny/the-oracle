@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { sql } from "@vercel/postgres"
+import { sql } from "@/lib/db"
 import { parseFile } from "@/lib/file-parsers"
 import {
   processTransactions,
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { transactionFileIds, nxnFileId } = body
+    const { transactionFileIds, nxnFileId, reportName } = body
 
     if (!transactionFileIds || !Array.isArray(transactionFileIds) || transactionFileIds.length === 0) {
       return NextResponse.json(
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     // Fetch file metadata and verify ownership
     const transactionFilesResult = await sql`
-      SELECT id, blob_url, file_name
+      SELECT id, blob_url, file_name, mime_type
       FROM uploaded_files
       WHERE id = ANY(${transactionFileIds}) AND user_id = ${session.user.id}
     `
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     const nxnFileResult = await sql`
-      SELECT id, blob_url, file_name
+      SELECT id, blob_url, file_name, mime_type
       FROM uploaded_files
       WHERE id = ${nxnFileId} AND user_id = ${session.user.id}
     `
@@ -68,11 +68,26 @@ export async function POST(request: NextRequest) {
     // Fetch and parse transaction files
     const transactionData: TransactionRow[] = []
     for (const fileMeta of transactionFilesResult.rows) {
-      const fileResponse = await fetch(fileMeta.blob_url)
-      const blob = await fileResponse.blob()
-      const file = new File([blob], fileMeta.file_name, {
-        type: blob.type,
-      })
+      let file: File
+      
+      // Handle local file paths vs Vercel Blob URLs
+      if (fileMeta.blob_url.startsWith("/uploads/")) {
+        // Local file - read from filesystem
+        const { readFile } = await import("fs/promises")
+        const { join } = await import("path")
+        const filePath = join(process.cwd(), "public", fileMeta.blob_url)
+        const buffer = await readFile(filePath)
+        file = new File([buffer], fileMeta.file_name, {
+          type: fileMeta.mime_type || "application/octet-stream",
+        })
+      } else {
+        // Vercel Blob URL - fetch from remote
+        const fileResponse = await fetch(fileMeta.blob_url)
+        const blob = await fileResponse.blob()
+        file = new File([blob], fileMeta.file_name, {
+          type: blob.type,
+        })
+      }
 
       const parsed = await parseFile(file)
       const rows = parsed.data.map((row: any) => ({
@@ -84,11 +99,26 @@ export async function POST(request: NextRequest) {
 
     // Fetch and parse NXN lookup file
     const nxnFileMeta = nxnFileResult.rows[0]
-    const nxnFileResponse = await fetch(nxnFileMeta.blob_url)
-    const nxnBlob = await nxnFileResponse.blob()
-    const nxnFile = new File([nxnBlob], nxnFileMeta.file_name, {
-      type: nxnBlob.type,
-    })
+    let nxnFile: File
+    
+    // Handle local file paths vs Vercel Blob URLs
+    if (nxnFileMeta.blob_url.startsWith("/uploads/")) {
+      // Local file - read from filesystem
+      const { readFile } = await import("fs/promises")
+      const { join } = await import("path")
+      const filePath = join(process.cwd(), "public", nxnFileMeta.blob_url)
+      const buffer = await readFile(filePath)
+      nxnFile = new File([buffer], nxnFileMeta.file_name, {
+        type: nxnFileMeta.mime_type || "application/octet-stream",
+      })
+    } else {
+      // Vercel Blob URL - fetch from remote
+      const nxnFileResponse = await fetch(nxnFileMeta.blob_url)
+      const nxnBlob = await nxnFileResponse.blob()
+      nxnFile = new File([nxnBlob], nxnFileMeta.file_name, {
+        type: nxnBlob.type,
+      })
+    }
 
     const parsedNxn = await parseFile(nxnFile, { headerRow: 1 })
     const nxnLookupData: NxnLookupRow[] = parsedNxn.data as NxnLookupRow[]
@@ -104,11 +134,15 @@ export async function POST(request: NextRequest) {
     const summary = getSummaryStats(results, nxnLookupData)
     const revenueByFile = getRevenueBySourceFile(deduplicatedTransactions)
 
+    // Generate default name if not provided
+    const finalReportName = reportName?.trim() || `Report ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`
+
     // Save report to database
     const reportResult = await sql`
-      INSERT INTO reports (user_id, transaction_file_ids, nxn_file_id, report_data)
+      INSERT INTO reports (user_id, name, transaction_file_ids, nxn_file_id, report_data)
       VALUES (
         ${session.user.id},
+        ${finalReportName},
         ${transactionFileIds}::uuid[],
         ${nxnFileId},
         ${JSON.stringify({

@@ -3,24 +3,19 @@
 import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { FileUploader } from "@/components/FileUploader"
+import { ReportWizard } from "@/components/ReportWizard"
+import { ReportsList } from "@/components/ReportsList"
+import { FilesLibrary } from "@/components/FilesLibrary"
 import { MetricsCards } from "@/components/MetricsCards"
 import { ReportTable } from "@/components/ReportTable"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, FileText, AlertCircle } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Loader2, Plus, ArrowLeft, AlertCircle, User, FileText, Calendar } from "lucide-react"
 import { ExportButtons } from "@/components/ExportButtons"
 import type { ProcessedLineItem } from "@/components/ReportTable"
-
-interface UploadedFile {
-  id: string
-  fileName: string
-  fileType: string
-  blobUrl: string
-  fileSize: number
-  createdAt: string
-}
+import { format } from "date-fns"
 
 interface ReportData {
   results: ProcessedLineItem[]
@@ -32,13 +27,30 @@ interface ReportData {
 export default function ReportsPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [transactionFiles, setTransactionFiles] = useState<UploadedFile[]>([])
-  const [nxnFiles, setNxnFiles] = useState<UploadedFile[]>([])
-  const [selectedTransactionFiles, setSelectedTransactionFiles] = useState<string[]>([])
-  const [selectedNxnFile, setSelectedNxnFile] = useState<string>("")
-  const [processing, setProcessing] = useState(false)
+  const [activeTab, setActiveTab] = useState<"list" | "create" | "view" | "files">("list")
   const [reportData, setReportData] = useState<ReportData | null>(null)
-  const [error, setError] = useState<string>("")
+  const [viewingReportId, setViewingReportId] = useState<string | null>(null)
+  const [viewingReportMeta, setViewingReportMeta] = useState<{
+    name?: string
+    author_name?: string
+    author_email?: string
+    created_at?: string
+    transaction_files?: Array<{
+      id: string
+      file_name: string
+      file_size: number
+      row_count?: number
+      created_at: string
+    }>
+    nxn_file?: {
+      id: string
+      file_name: string
+      file_size: number
+      row_count?: number
+      created_at: string
+    }
+  } | null>(null)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -46,61 +58,32 @@ export default function ReportsPage() {
     }
   }, [status, router])
 
-  useEffect(() => {
-    if (session?.user) {
-      fetchFiles()
-    }
-  }, [session])
-
-  const fetchFiles = async () => {
-    try {
-      const [transactionRes, nxnRes] = await Promise.all([
-        fetch("/api/upload?fileType=transaction"),
-        fetch("/api/upload?fileType=nxn_lookup"),
-      ])
-
-      const transactionData = await transactionRes.json()
-      const nxnData = await nxnRes.json()
-
-      setTransactionFiles(transactionData.files || [])
-      setNxnFiles(nxnData.files || [])
-    } catch (err) {
-      console.error("Failed to fetch files:", err)
-    }
+  const handleReportGenerated = () => {
+    setRefreshTrigger((prev) => prev + 1)
+    setActiveTab("list")
   }
 
-  const handleProcess = async () => {
-    if (selectedTransactionFiles.length === 0 || !selectedNxnFile) {
-      setError("Please select at least one transaction file and one NXN lookup file")
-      return
-    }
-
-    setProcessing(true)
-    setError("")
-
+  const handleViewReport = async (reportId: string) => {
     try {
-      const response = await fetch("/api/process", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          transactionFileIds: selectedTransactionFiles,
-          nxnFileId: selectedNxnFile,
-        }),
-      })
-
+      const response = await fetch(`/api/reports?id=${reportId}`)
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Processing failed")
+        throw new Error("Failed to fetch report")
       }
-
       const data = await response.json()
-      setReportData(data.report)
-    } catch (err: any) {
-      setError(err.message || "Failed to process files")
-    } finally {
-      setProcessing(false)
+      setReportData(data.report.report_data)
+      setViewingReportMeta({
+        name: data.report.name,
+        author_name: data.report.author_name,
+        author_email: data.report.author_email,
+        created_at: data.report.created_at,
+        transaction_files: data.report.transaction_files || [],
+        nxn_file: data.report.nxn_file,
+      })
+      setViewingReportId(reportId)
+      setActiveTab("view")
+    } catch (error) {
+      console.error("Failed to load report:", error)
+      alert("Failed to load report. Please try again.")
     }
   }
 
@@ -126,152 +109,140 @@ export default function ReportsPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="upload" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="upload">1. Upload Files</TabsTrigger>
-          <TabsTrigger value="process" disabled={transactionFiles.length === 0 || nxnFiles.length === 0}>
-            2. Process Data
-          </TabsTrigger>
-          <TabsTrigger value="results" disabled={!reportData}>
-            3. Results
-          </TabsTrigger>
+          <TabsTrigger value="list">Saved Reports</TabsTrigger>
+          <TabsTrigger value="create">Create New Report</TabsTrigger>
+          <TabsTrigger value="files">Files Library</TabsTrigger>
+          {activeTab === "view" && <TabsTrigger value="view">View Report</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="upload" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Transaction Detail Files</CardTitle>
-                <CardDescription>
-                  Upload one or more Dashboard Transaction Events files
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <FileUploader
-                  fileType="transaction"
-                  onUploadComplete={() => fetchFiles()}
-                />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>NXN Lookup File</CardTitle>
-                <CardDescription>
-                  Upload Line Item Lookup file
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <FileUploader
-                  fileType="nxn_lookup"
-                  onUploadComplete={() => fetchFiles()}
-                />
-              </CardContent>
-            </Card>
+        <TabsContent value="list" className="space-y-4">
+          <div className="flex justify-end">
+            <Button onClick={() => setActiveTab("create")}>
+              <Plus className="mr-2 h-4 w-4" />
+              Create New Report
+            </Button>
           </div>
-
-          {transactionFiles.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Select Transaction Files</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {transactionFiles.map((file) => (
-                    <label key={file.id} className="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-muted">
-                      <input
-                        type="checkbox"
-                        checked={selectedTransactionFiles.includes(file.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedTransactionFiles([...selectedTransactionFiles, file.id])
-                          } else {
-                            setSelectedTransactionFiles(
-                              selectedTransactionFiles.filter((id) => id !== file.id)
-                            )
-                          }
-                        }}
-                      />
-                      <FileText className="h-4 w-4" />
-                      <span className="text-sm">{file.fileName}</span>
-                    </label>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {nxnFiles.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Select NXN Lookup File</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {nxnFiles.map((file) => (
-                    <label key={file.id} className="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-muted">
-                      <input
-                        type="radio"
-                        name="nxnFile"
-                        checked={selectedNxnFile === file.id}
-                        onChange={() => setSelectedNxnFile(file.id)}
-                      />
-                      <FileText className="h-4 w-4" />
-                      <span className="text-sm">{file.fileName}</span>
-                    </label>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          <ReportsList onViewReport={handleViewReport} refreshTrigger={refreshTrigger} />
         </TabsContent>
 
-        <TabsContent value="process" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Process Data</CardTitle>
-              <CardDescription>
-                Analyze line item performance from selected files
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {error && (
-                <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4" />
-                  {error}
-                </div>
-              )}
+        <TabsContent value="create" className="space-y-4">
+          <ReportWizard onReportGenerated={handleReportGenerated} />
+        </TabsContent>
 
-              <div className="space-y-2">
-                <p className="text-sm font-medium">
-                  Selected Transaction Files: {selectedTransactionFiles.length}
-                </p>
-                <p className="text-sm font-medium">
-                  Selected NXN File: {selectedNxnFile ? "Yes" : "No"}
-                </p>
+        <TabsContent value="files" className="space-y-4">
+          <FilesLibrary />
+        </TabsContent>
+
+        <TabsContent value="view" className="space-y-4">
+          {reportData ? (
+            <>
+              <div className="flex items-center justify-between">
+                <Button variant="outline" onClick={() => setActiveTab("list")}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to Reports
+                </Button>
               </div>
 
-              <Button
-                onClick={handleProcess}
-                disabled={processing || selectedTransactionFiles.length === 0 || !selectedNxnFile}
-                className="w-full"
-              >
-                {processing ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  "Analyze Line Item Performance"
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
+              {viewingReportMeta && (
+                <>
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle>{viewingReportMeta.name || "Report"}</CardTitle>
+                          <CardDescription className="mt-2">
+                            <div className="flex items-center gap-4 text-sm">
+                              {viewingReportMeta.author_name && (
+                                <div className="flex items-center gap-1">
+                                  <User className="h-3 w-3" />
+                                  <span>Author: {viewingReportMeta.author_name}</span>
+                                  {viewingReportMeta.author_email && (
+                                    <span className="text-muted-foreground">
+                                      ({viewingReportMeta.author_email})
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {viewingReportMeta.created_at && (
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  <span className="text-muted-foreground">
+                                    Created: {format(new Date(viewingReportMeta.created_at), "MMM d, yyyy 'at' h:mm a")}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </CardDescription>
+                        </div>
+                      </div>
+                    </CardHeader>
+                  </Card>
 
-        <TabsContent value="results" className="space-y-4">
-          {reportData && (
-            <>
+                  {(viewingReportMeta.transaction_files?.length > 0 || viewingReportMeta.nxn_file) && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">Source Files</CardTitle>
+                        <CardDescription>
+                          Files used to generate this report
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {viewingReportMeta.transaction_files && viewingReportMeta.transaction_files.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-medium mb-2">Transaction Files ({viewingReportMeta.transaction_files.length})</h4>
+                            <div className="space-y-2">
+                              {viewingReportMeta.transaction_files.map((file) => (
+                                <div
+                                  key={file.id}
+                                  className="flex items-center justify-between p-3 border rounded-md bg-muted/30"
+                                >
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate">{file.file_name}</p>
+                                      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                                        <span>{(file.file_size / 1024).toFixed(1)} KB</span>
+                                        {file.row_count !== undefined && file.row_count !== null && (
+                                          <span>• {file.row_count.toLocaleString()} rows</span>
+                                        )}
+                                        <span>• {format(new Date(file.created_at), "MMM d, yyyy")}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {viewingReportMeta.nxn_file && (
+                          <div>
+                            <h4 className="text-sm font-medium mb-2">NXN Lookup File</h4>
+                            <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate">{viewingReportMeta.nxn_file.file_name}</p>
+                                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                                    <span>{(viewingReportMeta.nxn_file.file_size / 1024).toFixed(1)} KB</span>
+                                    {viewingReportMeta.nxn_file.row_count !== undefined && viewingReportMeta.nxn_file.row_count !== null && (
+                                      <span>• {viewingReportMeta.nxn_file.row_count.toLocaleString()} rows</span>
+                                    )}
+                                    <span>• {format(new Date(viewingReportMeta.nxn_file.created_at), "MMM d, yyyy")}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              )}
+
               <Card className="bg-blue-50 border-blue-200">
                 <CardContent className="pt-6">
                   <p className="text-sm text-blue-800">
@@ -333,10 +304,26 @@ export default function ReportsPage() {
                 </Card>
               )}
             </>
+          ) : (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <AlertCircle className="h-8 w-8 text-muted-foreground mb-2" />
+                  <p className="text-muted-foreground">No report data available</p>
+                  <Button
+                    variant="outline"
+                    className="mt-4"
+                    onClick={() => setActiveTab("list")}
+                  >
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Back to Reports
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           )}
         </TabsContent>
       </Tabs>
     </div>
   )
 }
-

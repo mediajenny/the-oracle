@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { uploadFile } from "@/lib/storage"
-import { sql } from "@vercel/postgres"
+import { sql } from "@/lib/db"
 import { parseFile } from "@/lib/file-parsers"
 
 export async function POST(request: NextRequest) {
@@ -30,8 +30,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Upload to Vercel Blob
-    const { url, size } = await uploadFile(file, session.user.id)
+    // Upload file (Vercel Blob in production, local filesystem in development)
+    let url: string
+    let size: number
+    
+    try {
+      const result = await uploadFile(file, session.user.id)
+      url = result.url
+      size = result.size
+    } catch (error: any) {
+      // If Blob upload fails and we're in development, provide helpful error
+      if (!process.env.BLOB_READ_WRITE_TOKEN && process.env.NODE_ENV === "development") {
+        return NextResponse.json(
+          {
+            error: "File upload is not configured. For local development, files are stored in the public/uploads directory. Make sure the directory is writable.",
+            details: error.message,
+          },
+          { status: 500 }
+        )
+      }
+      throw error
+    }
 
     // Parse file to validate it
     let parsedData
@@ -84,9 +103,9 @@ export async function POST(request: NextRequest) {
 
     // Save file metadata to database
     const result = await sql`
-      INSERT INTO uploaded_files (user_id, file_name, file_type, blob_url, file_size, mime_type)
-      VALUES (${session.user.id}, ${file.name}, ${fileType}, ${url}, ${size}, ${file.type})
-      RETURNING id, file_name, file_type, blob_url, file_size, created_at
+      INSERT INTO uploaded_files (user_id, file_name, file_type, blob_url, file_size, mime_type, row_count)
+      VALUES (${session.user.id}, ${file.name}, ${fileType}, ${url}, ${size}, ${file.type}, ${parsedData.data.length})
+      RETURNING id, file_name, file_type, blob_url, file_size, row_count, created_at
     `
 
     return NextResponse.json({
@@ -97,8 +116,8 @@ export async function POST(request: NextRequest) {
         fileType: result.rows[0].file_type,
         blobUrl: result.rows[0].blob_url,
         fileSize: result.rows[0].file_size,
+        rowCount: result.rows[0].row_count,
         createdAt: result.rows[0].created_at,
-        rowCount: parsedData.data.length,
       },
     })
   } catch (error: any) {
@@ -120,14 +139,14 @@ export async function GET(request: NextRequest) {
     const fileType = request.nextUrl.searchParams.get("fileType")
 
     let query = sql`
-      SELECT id, file_name, file_type, blob_url, file_size, created_at
+      SELECT id, file_name, file_type, blob_url, file_size, row_count, created_at
       FROM uploaded_files
       WHERE user_id = ${session.user.id}
     `
 
     if (fileType) {
       query = sql`
-        SELECT id, file_name, file_type, blob_url, file_size, created_at
+        SELECT id, file_name, file_type, blob_url, file_size, row_count, created_at
         FROM uploaded_files
         WHERE user_id = ${session.user.id} AND file_type = ${fileType}
       `
@@ -142,6 +161,7 @@ export async function GET(request: NextRequest) {
         fileType: row.file_type,
         blobUrl: row.blob_url,
         fileSize: row.file_size,
+        rowCount: row.row_count,
         createdAt: row.created_at,
       })),
     })

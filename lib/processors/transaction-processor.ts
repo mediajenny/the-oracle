@@ -186,17 +186,32 @@ export function getSummaryStats(
   ).length
 
   const totalTransactions = results.reduce(
-    (sum, r) => sum + r["Unique Transaction Count"],
+    (sum, r) => {
+      const count = typeof r["Unique Transaction Count"] === "number"
+        ? r["Unique Transaction Count"]
+        : parseInt(String(r["Unique Transaction Count"] || 0), 10) || 0
+      return sum + count
+    },
     0
   )
 
   const totalRevenue = results.reduce(
-    (sum, r) => sum + r["Total Transaction Amount"],
+    (sum, r) => {
+      const amount = typeof r["Total Transaction Amount"] === "number"
+        ? r["Total Transaction Amount"]
+        : parseFloat(String(r["Total Transaction Amount"] || 0)) || 0
+      return sum + amount
+    },
     0
   )
 
   const totalSpend = results.reduce(
-    (sum, r) => sum + (r["NXN Spend"] || 0),
+    (sum, r) => {
+      const spend = typeof r["NXN Spend"] === "number"
+        ? r["NXN Spend"]
+        : parseFloat(String(r["NXN Spend"] || 0)) || 0
+      return sum + spend
+    },
     0
   )
 

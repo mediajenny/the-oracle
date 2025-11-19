@@ -52,8 +52,12 @@ export async function parseExcelFile(
  * Parse a CSV file
  */
 export async function parseCSVFile(file: File): Promise<ParsedFile> {
+  // Convert File to string for Node.js environment
+  const arrayBuffer = await file.arrayBuffer()
+  const text = Buffer.from(arrayBuffer).toString("utf-8")
+  
   return new Promise((resolve, reject) => {
-    Papa.parse(file, {
+    Papa.parse(text, {
       header: true,
       skipEmptyLines: true,
       complete: (results) => {

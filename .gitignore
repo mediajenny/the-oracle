@@ -45,3 +45,6 @@ env/
 venv/
 ENV/
 .venv
+
+# local uploads
+/public/uploads

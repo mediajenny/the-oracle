@@ -34,11 +34,23 @@ export function enrichWithNxnData(
     // Handle duplicates by aggregating numeric fields
     if (nxnMap.has(lineItemId)) {
       const existing = nxnMap.get(lineItemId)!
-      // Sum impressions and spend
-      existing.impressions =
-        (existing.impressions || 0) + (row.impressions || 0)
-      existing.advertiser_invoice =
-        (existing.advertiser_invoice || 0) + (row.advertiser_invoice || 0)
+      // Sum impressions and spend (ensure they're numbers)
+      const existingImpressions = typeof existing.impressions === "number" 
+        ? existing.impressions 
+        : parseFloat(String(existing.impressions || 0)) || 0
+      const rowImpressions = typeof row.impressions === "number"
+        ? row.impressions
+        : parseFloat(String(row.impressions || 0)) || 0
+      
+      const existingSpend = typeof existing.advertiser_invoice === "number"
+        ? existing.advertiser_invoice
+        : parseFloat(String(existing.advertiser_invoice || 0)) || 0
+      const rowSpend = typeof row.advertiser_invoice === "number"
+        ? row.advertiser_invoice
+        : parseFloat(String(row.advertiser_invoice || 0)) || 0
+      
+      existing.impressions = existingImpressions + rowImpressions
+      existing.advertiser_invoice = existingSpend + rowSpend
     } else {
       nxnMap.set(lineItemId, { ...row })
     }
@@ -59,6 +71,15 @@ export function enrichWithNxnData(
     // Use package_id if packag_id doesn't exist
     const packageId = nxnData.package_id || nxnData.packag_id
 
+    // Ensure numeric values are properly parsed
+    const impressions = typeof nxnData.impressions === "number" 
+      ? nxnData.impressions 
+      : parseFloat(String(nxnData.impressions || 0)) || 0
+    
+    const spend = typeof nxnData.advertiser_invoice === "number"
+      ? nxnData.advertiser_invoice
+      : parseFloat(String(nxnData.advertiser_invoice || 0)) || 0
+
     const enrichedItem: ProcessedLineItem = {
       ...item,
       "NXN Line Item Name": nxnData.line_item_name,
@@ -67,8 +88,8 @@ export function enrichWithNxnData(
       "Insertion Order Name": nxnData.insertion_order_name,
       "Package ID": packageId,
       "Package Name": nxnData.package_name,
-      "NXN Impressions": nxnData.impressions,
-      "NXN Spend": nxnData.advertiser_invoice,
+      "NXN Impressions": impressions,
+      "NXN Spend": spend,
       "Match Status": "Matched" as const,
     }
 
