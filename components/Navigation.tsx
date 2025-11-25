@@ -8,7 +8,7 @@ export function Navigation() {
     <nav className="border-b">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <Link href="/" className="text-xl font-bold">
-          The Oracle
+          The Observatory
         </Link>
         <div className="flex items-center gap-4">
           <Link href="/reports">
