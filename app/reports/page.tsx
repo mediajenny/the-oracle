@@ -1,21 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
-import { ReportWizard } from "@/components/ReportWizard"
-import { ReportsList } from "@/components/ReportsList"
-import { FilesLibrary } from "@/components/FilesLibrary"
+import { useState, useCallback } from "react"
+import { useDropzone } from "react-dropzone"
 import { MetricsCards } from "@/components/MetricsCards"
 import { ReportTable } from "@/components/ReportTable"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
-import { Loader2, Plus, ArrowLeft, AlertCircle, User, FileText, Calendar, Download, Share2, Copy, Check } from "lucide-react"
+import { Loader2, Upload, FileText, X, AlertCircle } from "lucide-react"
 import { ExportButtons } from "@/components/ExportButtons"
 import type { ProcessedLineItem } from "@/components/ReportTable"
-import { format } from "date-fns"
 
 interface ReportData {
   results: ProcessedLineItem[]
@@ -24,169 +17,191 @@ interface ReportData {
   revenueByFile: any[]
 }
 
+interface UploadedFile {
+  file: File
+  name: string
+  size: number
+}
+
 export default function ReportsPage() {
-  const { data: session, status } = useSession()
-  const router = useRouter()
-  const [activeTab, setActiveTab] = useState<"list" | "create" | "view" | "files">("list")
+  const [transactionFiles, setTransactionFiles] = useState<UploadedFile[]>([])
+  const [nxnFile, setNxnFile] = useState<UploadedFile | null>(null)
   const [reportData, setReportData] = useState<ReportData | null>(null)
-  const [viewingReportId, setViewingReportId] = useState<string | null>(null)
-  const [viewingReportMeta, setViewingReportMeta] = useState<{
-    name?: string
-    author_name?: string
-    author_email?: string
-    created_at?: string
-    share_token?: string
-    transaction_files?: Array<{
-      id: string
-      file_name: string
-      file_size: number
-      row_count?: number
-      created_at: string
-    }>
-    nxn_file?: {
-      id: string
-      file_name: string
-      file_size: number
-      row_count?: number
-      created_at: string
-    }
-  } | null>(null)
-  const [refreshTrigger, setRefreshTrigger] = useState(0)
-  const [shareUrl, setShareUrl] = useState<string>("")
-  const [copied, setCopied] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login")
-    }
-  }, [status, router])
+  const onDropTransactions = useCallback((acceptedFiles: File[]) => {
+    const newFiles = acceptedFiles.map(file => ({
+      file,
+      name: file.name,
+      size: file.size,
+    }))
+    setTransactionFiles(prev => [...prev, ...newFiles])
+    setError(null)
+  }, [])
 
-  const handleDownloadFile = (fileId: string, fileName: string) => {
-    const downloadUrl = `/api/upload?id=${fileId}&download=true`
-    const link = document.createElement("a")
-    link.href = downloadUrl
-    link.download = fileName
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
-
-  const fetchShareLink = async (reportId: string) => {
-    try {
-      const response = await fetch(`/api/reports/${reportId}/share`)
-      if (!response.ok) {
-        throw new Error("Failed to get share link")
-      }
-      const data = await response.json()
-      setShareUrl(data.shareUrl)
-      setViewingReportMeta((prev) => ({
-        ...prev,
-        share_token: data.shareToken,
-      }))
-    } catch (error) {
-      console.error("Failed to fetch share link:", error)
-    }
-  }
-
-  const handleCopyShareLink = async () => {
-    let urlToCopy = shareUrl
-
-    if (!urlToCopy && viewingReportId) {
-      try {
-        const response = await fetch(`/api/reports/${viewingReportId}/share`)
-        if (!response.ok) {
-          throw new Error("Failed to get share link")
-        }
-        const data = await response.json()
-        urlToCopy = data.shareUrl
-        setShareUrl(urlToCopy)
-        setViewingReportMeta((prev) => ({
-          ...prev,
-          share_token: data.shareToken,
-        }))
-      } catch (error) {
-        console.error("Failed to fetch share link:", error)
-        alert("Failed to generate share link")
-        return
-      }
-    }
-
-    if (urlToCopy) {
-      await navigator.clipboard.writeText(urlToCopy)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
-  const handleRevokeShareLink = async () => {
-    if (!viewingReportId) return
-
-    try {
-      const response = await fetch(`/api/reports/${viewingReportId}/share`, {
-        method: "DELETE",
+  const onDropNxn = useCallback((acceptedFiles: File[]) => {
+    if (acceptedFiles.length > 0) {
+      const file = acceptedFiles[0]
+      setNxnFile({
+        file,
+        name: file.name,
+        size: file.size,
       })
-      if (!response.ok) {
-        throw new Error("Failed to revoke share link")
-      }
-      setShareUrl("")
-      setViewingReportMeta((prev) => ({
-        ...prev,
-        share_token: undefined,
-      }))
-    } catch (error) {
-      console.error("Failed to revoke share link:", error)
-      alert("Failed to revoke share link")
+      setError(null)
     }
+  }, [])
+
+  const transactionDropzone = useDropzone({
+    onDrop: onDropTransactions,
+    accept: {
+      "text/csv": [".csv"],
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+      "application/vnd.ms-excel": [".xls"],
+    },
+  })
+
+  const nxnDropzone = useDropzone({
+    onDrop: onDropNxn,
+    accept: {
+      "text/csv": [".csv"],
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+      "application/vnd.ms-excel": [".xls"],
+    },
+    maxFiles: 1,
+  })
+
+  const removeTransactionFile = (index: number) => {
+    setTransactionFiles(prev => prev.filter((_, i) => i !== index))
   }
 
-  const handleReportGenerated = () => {
-    setRefreshTrigger((prev) => prev + 1)
-    setActiveTab("list")
-  }
+  const generateReport = async () => {
+    if (transactionFiles.length === 0 || !nxnFile) {
+      setError("Please upload at least one transaction file and one NXN lookup file")
+      return
+    }
 
-  const handleViewReport = async (reportId: string) => {
+    setLoading(true)
+    setError(null)
+
     try {
-      const response = await fetch(`/api/reports?id=${reportId}`)
-      if (!response.ok) {
-        throw new Error("Failed to fetch report")
-      }
-      const data = await response.json()
-      setReportData(data.report.report_data)
-      setViewingReportMeta({
-        name: data.report.name,
-        author_name: data.report.author_name,
-        author_email: data.report.author_email,
-        created_at: data.report.created_at,
-        share_token: data.report.share_token,
-        transaction_files: data.report.transaction_files || [],
-        nxn_file: data.report.nxn_file,
-      })
-      setViewingReportId(reportId)
-      setActiveTab("view")
+      const formData = new FormData()
 
-      // Fetch share link if token exists
-      if (data.report.share_token) {
-        const baseUrl = window.location.origin
-        setShareUrl(`${baseUrl}/share/${data.report.share_token}`)
+      // Add transaction files
+      transactionFiles.forEach((f) => {
+        formData.append("transactionFiles", f.file)
+      })
+
+      // Add NXN file
+      formData.append("nxnFile", nxnFile.file)
+
+      const response = await fetch("/api/process", {
+        method: "POST",
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to process files")
       }
-    } catch (error) {
-      console.error("Failed to load report:", error)
-      alert("Failed to load report. Please try again.")
+
+      const data = await response.json()
+      setReportData(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred while processing files")
+    } finally {
+      setLoading(false)
     }
   }
 
-  if (status === "loading") {
+  const resetReport = () => {
+    setReportData(null)
+    setTransactionFiles([])
+    setNxnFile(null)
+    setError(null)
+  }
+
+  // Show report view if we have data
+  if (reportData) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="container mx-auto py-8 space-y-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Line Item Performance Report</h1>
+            <p className="text-muted-foreground mt-2">
+              Generated from {transactionFiles.length} transaction file(s) and NXN lookup
+            </p>
+          </div>
+          <Button variant="outline" onClick={resetReport}>
+            Create New Report
+          </Button>
+        </div>
+
+        <Card className="bg-blue-50 border-blue-200">
+          <CardContent className="pt-6">
+            <p className="text-sm text-blue-800">
+              💡 Use summary metrics internally only, do not report these to the client since
+              these are showing total duplicated revenue and transaction impact. These are not
+              deduplicated transactions.
+            </p>
+          </CardContent>
+        </Card>
+
+        <MetricsCards summary={reportData.summary} />
+
+        <div className="flex justify-end">
+          <ExportButtons data={reportData.results} />
+        </div>
+
+        <ReportTable data={reportData.results} />
+
+        {reportData.unmatchedNxn.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>NXN Line Items Not Matched to Transactions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                ⚠ {reportData.unmatchedNxn.length} line items in NXN file have no matching
+                transactions.
+              </p>
+              <div className="rounded-md border">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="p-2 text-left">LINEITEMID</th>
+                      <th className="p-2 text-left">NXN Line Item Name</th>
+                      <th className="p-2 text-left">NXN Impressions</th>
+                      <th className="p-2 text-left">DSP Spend</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.unmatchedNxn.slice(0, 10).map((item, idx) => (
+                      <tr key={idx} className="border-b">
+                        <td className="p-2">{item.line_item_id}</td>
+                        <td className="p-2">{item.line_item_name || ""}</td>
+                        <td className="p-2">{item.impressions?.toLocaleString() || ""}</td>
+                        <td className="p-2">
+                          {item.advertiser_invoice
+                            ? `$${item.advertiser_invoice.toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}`
+                            : ""}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     )
   }
 
-  if (!session) {
-    return null
-  }
-
+  // Show upload form
   return (
     <div className="container mx-auto py-8 space-y-8">
       <div>
@@ -197,290 +212,140 @@ export default function ReportsPage() {
         </p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="list">Saved Reports</TabsTrigger>
-          <TabsTrigger value="create">Create New Report</TabsTrigger>
-          <TabsTrigger value="files">Files Library</TabsTrigger>
-          {activeTab === "view" && <TabsTrigger value="view">View Report</TabsTrigger>}
-        </TabsList>
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Transaction Files Upload */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Transaction Files</CardTitle>
+            <CardDescription>
+              Upload one or more transaction export files (CSV or Excel)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div
+              {...transactionDropzone.getRootProps()}
+              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                transactionDropzone.isDragActive
+                  ? "border-primary bg-primary/5"
+                  : "border-muted-foreground/25 hover:border-primary/50"
+              }`}
+            >
+              <input {...transactionDropzone.getInputProps()} />
+              <Upload className="h-8 w-8 mx-auto mb-4 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                Drag & drop files here, or click to select
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Supports CSV, XLSX, XLS
+              </p>
+            </div>
 
-        <TabsContent value="list" className="space-y-4">
-          <div className="flex justify-end">
-            <Button onClick={() => setActiveTab("create")}>
-              <Plus className="mr-2 h-4 w-4" />
-              Create New Report
-            </Button>
-          </div>
-          <ReportsList onViewReport={handleViewReport} refreshTrigger={refreshTrigger} />
-        </TabsContent>
+            {transactionFiles.length > 0 && (
+              <div className="space-y-2">
+                {transactionFiles.map((file, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-2 border rounded-md bg-muted/30"
+                  >
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm truncate max-w-[200px]">{file.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        ({(file.size / 1024).toFixed(1)} KB)
+                      </span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => removeTransactionFile(index)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-        <TabsContent value="create" className="space-y-4">
-          <ReportWizard onReportGenerated={handleReportGenerated} />
-        </TabsContent>
+        {/* NXN Lookup File Upload */}
+        <Card>
+          <CardHeader>
+            <CardTitle>NXN Lookup File</CardTitle>
+            <CardDescription>
+              Upload the NXN lookup file with line item details (CSV or Excel)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div
+              {...nxnDropzone.getRootProps()}
+              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                nxnDropzone.isDragActive
+                  ? "border-primary bg-primary/5"
+                  : "border-muted-foreground/25 hover:border-primary/50"
+              }`}
+            >
+              <input {...nxnDropzone.getInputProps()} />
+              <Upload className="h-8 w-8 mx-auto mb-4 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                Drag & drop file here, or click to select
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Supports CSV, XLSX, XLS
+              </p>
+            </div>
 
-        <TabsContent value="files" className="space-y-4">
-          <FilesLibrary />
-        </TabsContent>
-
-        <TabsContent value="view" className="space-y-4">
-          {reportData ? (
-            <>
-              <div className="flex items-center justify-between">
-                <Button variant="outline" onClick={() => setActiveTab("list")}>
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to Reports
+            {nxnFile && (
+              <div className="flex items-center justify-between p-2 border rounded-md bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm truncate max-w-[200px]">{nxnFile.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({(nxnFile.size / 1024).toFixed(1)} KB)
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => setNxnFile(null)}
+                >
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
-              {viewingReportMeta && (
-                <>
-                  <Card>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <CardTitle>{viewingReportMeta.name || "Report"}</CardTitle>
-                          <CardDescription className="mt-2">
-                            <div className="flex items-center gap-4 text-sm">
-                              {viewingReportMeta.author_name && (
-                                <div className="flex items-center gap-1">
-                                  <User className="h-3 w-3" />
-                                  <span>Author: {viewingReportMeta.author_name}</span>
-                                  {viewingReportMeta.author_email && (
-                                    <span className="text-muted-foreground">
-                                      ({viewingReportMeta.author_email})
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                              {viewingReportMeta.created_at && (
-                                <div className="flex items-center gap-1">
-                                  <Calendar className="h-3 w-3" />
-                                  <span className="text-muted-foreground">
-                                    Created: {format(new Date(viewingReportMeta.created_at), "MMM d, yyyy 'at' h:mm a")}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          </CardDescription>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {shareUrl ? (
-                            <>
-                              <div className="flex flex-col gap-2">
-                                <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-muted/50 max-w-md">
-                                  <input
-                                    type="text"
-                                    readOnly
-                                    value={shareUrl}
-                                    className="flex-1 bg-transparent text-sm outline-none"
-                                    onClick={(e) => (e.target as HTMLInputElement).select()}
-                                  />
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={handleCopyShareLink}
-                                    title="Copy share link"
-                                  >
-                                    {copied ? (
-                                      <Check className="h-4 w-4 text-green-600" />
-                                    ) : (
-                                      <Copy className="h-4 w-4" />
-                                    )}
-                                  </Button>
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                  Recipients must be logged in to view this report
-                                </p>
-                              </div>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={handleRevokeShareLink}
-                                title="Revoke share link"
-                              >
-                                Revoke
-                              </Button>
-                            </>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => viewingReportId && fetchShareLink(viewingReportId)}
-                              title="Generate share link"
-                            >
-                              <Share2 className="mr-2 h-4 w-4" />
-                              Share Report
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </CardHeader>
-                  </Card>
+      {error && (
+        <Card className="bg-destructive/10 border-destructive/50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-4 w-4" />
+              <p className="text-sm">{error}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-                  {((viewingReportMeta.transaction_files?.length ?? 0) > 0 || viewingReportMeta.nxn_file) && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-lg">Source Files</CardTitle>
-                        <CardDescription>
-                          Files used to generate this report
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        {viewingReportMeta.transaction_files && viewingReportMeta.transaction_files.length > 0 && (
-                          <div>
-                            <h4 className="text-sm font-medium mb-2">Transaction Files ({viewingReportMeta.transaction_files.length})</h4>
-                            <div className="space-y-2">
-                              {viewingReportMeta.transaction_files.map((file) => (
-                                <div
-                                  key={file.id}
-                                  className="flex items-center justify-between p-3 border rounded-md bg-muted/30"
-                                >
-                                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                                    <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium truncate">{file.file_name}</p>
-                                      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                                        <span>{(file.file_size / 1024).toFixed(1)} KB</span>
-                                        {file.row_count !== undefined && file.row_count !== null && (
-                                          <span>• {file.row_count.toLocaleString()} rows</span>
-                                        )}
-                                        <span>• {format(new Date(file.created_at), "MMM d, yyyy")}</span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 flex-shrink-0"
-                                    onClick={() => handleDownloadFile(file.id, file.file_name)}
-                                    title="Download file"
-                                  >
-                                    <Download className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {viewingReportMeta.nxn_file && (
-                          <div>
-                            <h4 className="text-sm font-medium mb-2">NXN Lookup File</h4>
-                            <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
-                              <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium truncate">{viewingReportMeta.nxn_file.file_name}</p>
-                                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                                    <span>{(viewingReportMeta.nxn_file.file_size / 1024).toFixed(1)} KB</span>
-                                    {viewingReportMeta.nxn_file.row_count !== undefined && viewingReportMeta.nxn_file.row_count !== null && (
-                                      <span>• {viewingReportMeta.nxn_file.row_count.toLocaleString()} rows</span>
-                                    )}
-                                    <span>• {format(new Date(viewingReportMeta.nxn_file.created_at), "MMM d, yyyy")}</span>
-                                  </div>
-                                </div>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 flex-shrink-0"
-                                onClick={() => viewingReportMeta.nxn_file && handleDownloadFile(viewingReportMeta.nxn_file.id, viewingReportMeta.nxn_file.file_name)}
-                                title="Download file"
-                              >
-                                <Download className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )}
-                </>
-              )}
-
-              <Card className="bg-blue-50 border-blue-200">
-                <CardContent className="pt-6">
-                  <p className="text-sm text-blue-800">
-                    💡 Use summary metrics internally only, do not report these to the client since
-                    these are showing total duplicated revenue and transaction impact. These are not
-                    deduplicated transactions.
-                  </p>
-                </CardContent>
-              </Card>
-
-              <MetricsCards summary={reportData.summary} />
-
-              <div className="flex justify-end">
-                <ExportButtons data={reportData.results} />
-              </div>
-
-              <ReportTable data={reportData.results} />
-
-              {reportData.unmatchedNxn.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>NXN Line Items Not Matched to Transactions</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      ⚠ {reportData.unmatchedNxn.length} line items in NXN file have no matching
-                      transactions.
-                    </p>
-                    <div className="rounded-md border">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="p-2 text-left">LINEITEMID</th>
-                            <th className="p-2 text-left">NXN Line Item Name</th>
-                            <th className="p-2 text-left">NXN Impressions</th>
-                            <th className="p-2 text-left">DSP Spend</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {reportData.unmatchedNxn.slice(0, 10).map((item, idx) => (
-                            <tr key={idx} className="border-b">
-                              <td className="p-2">{item.line_item_id}</td>
-                              <td className="p-2">{item.line_item_name || ""}</td>
-                              <td className="p-2">{item.impressions?.toLocaleString() || ""}</td>
-                              <td className="p-2">
-                                {item.advertiser_invoice
-                                  ? `$${item.advertiser_invoice.toLocaleString(undefined, {
-                                      minimumFractionDigits: 2,
-                                      maximumFractionDigits: 2,
-                                    })}`
-                                  : ""}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+      <div className="flex justify-center">
+        <Button
+          size="lg"
+          onClick={generateReport}
+          disabled={loading || transactionFiles.length === 0 || !nxnFile}
+        >
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Processing...
             </>
           ) : (
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <AlertCircle className="h-8 w-8 text-muted-foreground mb-2" />
-                  <p className="text-muted-foreground">No report data available</p>
-                  <Button
-                    variant="outline"
-                    className="mt-4"
-                    onClick={() => setActiveTab("list")}
-                  >
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Back to Reports
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            "Generate Report"
           )}
-        </TabsContent>
-      </Tabs>
+        </Button>
+      </div>
     </div>
   )
 }
