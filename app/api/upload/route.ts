@@ -275,7 +275,7 @@ export async function GET(request: NextRequest) {
     const result = await query
 
     return NextResponse.json({
-      files: result.rows.map((row) => ({
+      files: result.rows.map((row: Record<string, unknown>) => ({
         id: row.id,
         fileName: row.file_name,
         fileType: row.file_type,
