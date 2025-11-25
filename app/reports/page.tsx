@@ -319,7 +319,7 @@ export default function ReportsPage() {
                     </CardHeader>
                   </Card>
 
-                  {(viewingReportMeta.transaction_files?.length > 0 || viewingReportMeta.nxn_file) && (
+                  {((viewingReportMeta.transaction_files?.length ?? 0) > 0 || viewingReportMeta.nxn_file) && (
                     <Card>
                       <CardHeader>
                         <CardTitle className="text-lg">Source Files</CardTitle>
