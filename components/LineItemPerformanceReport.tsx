@@ -303,7 +303,7 @@ export function LineItemPerformanceReport() {
                     </CardHeader>
                   </Card>
 
-                  {(viewingReportMeta.transaction_files?.length > 0 || viewingReportMeta.nxn_file) && (
+                  {((viewingReportMeta.transaction_files?.length ?? 0) > 0 || viewingReportMeta.nxn_file) && (
                     <Card>
                       <CardHeader>
                         <CardTitle className="text-lg">Source Files</CardTitle>
@@ -370,7 +370,7 @@ export function LineItemPerformanceReport() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8 flex-shrink-0"
-                                onClick={() => handleDownloadFile(viewingReportMeta.nxn_file.id, viewingReportMeta.nxn_file.file_name)}
+                                onClick={() => viewingReportMeta.nxn_file && handleDownloadFile(viewingReportMeta.nxn_file.id, viewingReportMeta.nxn_file.file_name)}
                                 title="Download file"
                               >
                                 <Download className="h-4 w-4" />
