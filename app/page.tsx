@@ -1,31 +1,10 @@
 "use client"
 
-import { useSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
-import { useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Loader2 } from "lucide-react"
 
 export default function Home() {
-  const { data: session, status } = useSession()
-  const router = useRouter()
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      router.push("/dashboard")
-    }
-  }, [status, router])
-
-  if (status === "loading") {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    )
-  }
-
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-8">
       <div className="mx-auto max-w-4xl space-y-8">
@@ -45,9 +24,9 @@ export default function Home() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Link href={session ? "/reports" : "/login"}>
+              <Link href="/reports">
                 <Button className="w-full">
-                  {session ? "View Reports" : "Sign In to Continue"}
+                  View Reports
                 </Button>
               </Link>
             </CardContent>
