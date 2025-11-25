@@ -7,7 +7,7 @@ import { Navigation } from "@/components/Navigation"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "The Observatory - Campaign Performance Reports",
+  title: "The Oracle - Campaign Performance Tool",
   description: "Campaign performance analysis and reporting tools",
 }
 
