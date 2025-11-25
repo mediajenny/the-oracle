@@ -4,6 +4,8 @@ import { useState, useCallback } from "react"
 import { useDropzone } from "react-dropzone"
 import { MetricsCards } from "@/components/MetricsCards"
 import { ReportTable } from "@/components/ReportTable"
+import { TopLineItemsRanking } from "@/components/TopLineItemsRanking"
+import { FilterAndSearch } from "@/components/FilterAndSearch"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2, Upload, FileText, X, AlertCircle } from "lucide-react"
@@ -29,6 +31,11 @@ export default function ReportsPage() {
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Filter state
+  const [globalSearchTerm, setGlobalSearchTerm] = useState("")
+  const [globalInsertionOrderFilter, setGlobalInsertionOrderFilter] = useState<string[]>([])
+  const [globalAdvertiserFilter, setGlobalAdvertiserFilter] = useState<string[]>([])
 
   const onDropTransactions = useCallback((acceptedFiles: File[]) => {
     const newFiles = acceptedFiles.map(file => ({
@@ -119,6 +126,9 @@ export default function ReportsPage() {
     setTransactionFiles([])
     setNxnFile(null)
     setError(null)
+    setGlobalSearchTerm("")
+    setGlobalInsertionOrderFilter([])
+    setGlobalAdvertiserFilter([])
   }
 
   // Show report view if we have data
@@ -127,7 +137,7 @@ export default function ReportsPage() {
       <div className="container mx-auto py-8 space-y-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Line Item Performance Report</h1>
+            <h1 className="text-3xl font-bold">Dashboard Line Item Performance Report</h1>
             <p className="text-muted-foreground mt-2">
               Generated from {transactionFiles.length} transaction file(s) and NXN lookup
             </p>
@@ -147,13 +157,49 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
 
-        <MetricsCards summary={reportData.summary} />
+        {/* Summary Metrics */}
+        <div>
+          <h2 className="text-2xl font-bold mb-4">Summary Metrics</h2>
+          <MetricsCards summary={reportData.summary} />
+        </div>
 
+        {/* Filter & Search */}
+        <FilterAndSearch
+          data={reportData.results}
+          searchTerm={globalSearchTerm}
+          onSearchChange={setGlobalSearchTerm}
+          insertionOrderFilter={globalInsertionOrderFilter}
+          onInsertionOrderFilterChange={setGlobalInsertionOrderFilter}
+          advertiserFilter={globalAdvertiserFilter}
+          onAdvertiserFilterChange={setGlobalAdvertiserFilter}
+        />
+
+        {/* Top Performing Line Items */}
+        <div>
+          <h2 className="text-2xl font-bold mb-4">Top Performing Line Items</h2>
+          <TopLineItemsRanking
+            data={reportData.results}
+            topCount={10}
+            globalSearch={globalSearchTerm}
+            insertionOrderFilter={globalInsertionOrderFilter}
+          />
+        </div>
+
+        {/* Line Item Performance Table */}
+        <ReportTable
+          data={reportData.results}
+          searchTerm={globalSearchTerm}
+          onSearchChange={setGlobalSearchTerm}
+          insertionOrderFilter={globalInsertionOrderFilter}
+          onInsertionOrderFilterChange={setGlobalInsertionOrderFilter}
+          advertiserFilter={globalAdvertiserFilter}
+          onAdvertiserFilterChange={setGlobalAdvertiserFilter}
+        />
+
+        {/* Export Buttons */}
         <div className="flex justify-end">
           <ExportButtons data={reportData.results} />
         </div>
-
-        <ReportTable data={reportData.results} />
 
         {reportData.unmatchedNxn.length > 0 && (
           <Card>
@@ -205,7 +251,7 @@ export default function ReportsPage() {
   return (
     <div className="container mx-auto py-8 space-y-8">
       <div>
-        <h1 className="text-3xl font-bold">Dashboard Transactions Line Item Performance Report</h1>
+        <h1 className="text-3xl font-bold">Dashboard Line Item Performance Report</h1>
         <p className="text-muted-foreground mt-2">
           Analyze transaction data to show line item performance by extracting LINEITEMID values
           from impression journeys and aggregating transaction counts and amounts by line item.
