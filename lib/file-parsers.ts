@@ -55,7 +55,7 @@ export async function parseCSVFile(file: File): Promise<ParsedFile> {
   // Convert File to string for Node.js environment
   const arrayBuffer = await file.arrayBuffer()
   const text = Buffer.from(arrayBuffer).toString("utf-8")
-  
+
   return new Promise((resolve, reject) => {
     Papa.parse(text, {
       header: true,
@@ -66,7 +66,7 @@ export async function parseCSVFile(file: File): Promise<ParsedFile> {
           fileName: file.name,
         })
       },
-      error: (error) => {
+      error: (error: Error) => {
         reject(new Error(`CSV parsing error: ${error.message}`))
       },
     })
@@ -105,11 +105,11 @@ export async function parseExcelWithHeaderRow(
   }
 
   const worksheet = workbook.Sheets[targetSheet]
-  
+
   // Read with header row offset
   const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1")
   range.s.r = headerRow // Set start row to header row
-  
+
   const jsonData = XLSX.utils.sheet_to_json(worksheet, {
     defval: null,
     raw: false,
@@ -147,4 +147,3 @@ export async function parseFile(
     )
   }
 }
-
