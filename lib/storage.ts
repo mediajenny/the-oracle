@@ -20,13 +20,13 @@ export async function uploadFile(
     })
     return {
       url: blob.url,
-      size: blob.size,
+      size: file.size,
     }
   }
 
   // Local development: store in public/uploads directory
   const uploadsDir = join(process.cwd(), "public", "uploads", userId)
-  
+
   // Create directory if it doesn't exist
   if (!existsSync(uploadsDir)) {
     await mkdir(uploadsDir, { recursive: true })
@@ -35,12 +35,12 @@ export async function uploadFile(
   const fileName = `${Date.now()}-${file.name}`
   const filePath = join(uploadsDir, fileName)
   const buffer = Buffer.from(await file.arrayBuffer())
-  
+
   await writeFile(filePath, buffer)
 
   // Return a URL that can be accessed via Next.js public folder
   const url = `/uploads/${userId}/${fileName}`
-  
+
   return {
     url,
     size: buffer.length,
