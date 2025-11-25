@@ -352,21 +352,13 @@ export function ReportTable({
                             displayValue = formatNumber(value as number)
                           } else if (col.key === "Influenced ROAS (Not Deduplicated)") {
                             displayValue = value ? (value as number).toFixed(2) : ""
-                          } else if (col.key === "Match Status") {
-                            displayValue = value as string
                           } else {
                             displayValue = String(value)
                           }
 
                           return (
                             <TableCell key={col.key} className="whitespace-nowrap">
-                              {col.key === "Match Status" ? (
-                                <Badge variant={value === "Matched" ? "default" : "destructive"}>
-                                  {displayValue}
-                                </Badge>
-                              ) : (
-                                displayValue
-                              )}
+                              {displayValue}
                             </TableCell>
                           )
                         })}
