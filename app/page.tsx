@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { BarChart3, Image, TrendingUp, FileSpreadsheet } from "lucide-react"
+import { BarChart3, Image } from "lucide-react"
 
 export default function Home() {
   return (
@@ -14,7 +14,7 @@ export default function Home() {
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-5xl mx-auto">
+      <div className="grid gap-6 md:grid-cols-2 max-w-3xl mx-auto">
         <Link href="/reports" className="block">
           <Card className="h-full transition-all hover:shadow-lg hover:border-primary/50 cursor-pointer">
             <CardHeader>
@@ -22,7 +22,7 @@ export default function Home() {
                 <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
                   <BarChart3 className="h-6 w-6" />
                 </div>
-                <CardTitle className="text-lg">Line Item Performance</CardTitle>
+                <CardTitle className="text-lg">Dashboard Line Item Performance</CardTitle>
               </div>
             </CardHeader>
             <CardContent>
@@ -31,7 +31,7 @@ export default function Home() {
                 values from impression journeys and aggregating transaction counts and amounts.
               </CardDescription>
               <div className="mt-4 text-sm text-primary font-medium">
-                Dashboard Transactions Report →
+                Generate Report →
               </div>
             </CardContent>
           </Card>
@@ -50,46 +50,6 @@ export default function Home() {
             <CardDescription className="text-sm">
               Analyze creative performance metrics including impressions, clicks, and
               conversions across different creative assets and formats.
-            </CardDescription>
-            <div className="mt-4 text-sm text-muted-foreground font-medium">
-              Coming Soon
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="h-full opacity-60">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-100 text-green-600">
-                <TrendingUp className="h-6 w-6" />
-              </div>
-              <CardTitle className="text-lg">Campaign Trends</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <CardDescription className="text-sm">
-              Track campaign performance over time with trend analysis,
-              pacing reports, and forecasting tools.
-            </CardDescription>
-            <div className="mt-4 text-sm text-muted-foreground font-medium">
-              Coming Soon
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="h-full opacity-60">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-orange-100 text-orange-600">
-                <FileSpreadsheet className="h-6 w-6" />
-              </div>
-              <CardTitle className="text-lg">Data Exports</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <CardDescription className="text-sm">
-              Generate custom data exports and scheduled reports
-              for stakeholders and external partners.
             </CardDescription>
             <div className="mt-4 text-sm text-muted-foreground font-medium">
               Coming Soon
