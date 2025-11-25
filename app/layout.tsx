@@ -7,8 +7,8 @@ import { Navigation } from "@/components/Navigation"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "The Oracle - Campaign Performance Tool",
-  description: "Analyze campaign performance with line item and creative reports",
+  title: "The Observatory - Campaign Performance Reports",
+  description: "Campaign performance analysis and reporting tools",
 }
 
 export default function RootLayout({
@@ -27,4 +27,3 @@ export default function RootLayout({
     </html>
   )
 }
-
