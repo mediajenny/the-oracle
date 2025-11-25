@@ -386,7 +386,7 @@ export default function ReportsPage() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8 flex-shrink-0"
-                                onClick={() => handleDownloadFile(viewingReportMeta.nxn_file.id, viewingReportMeta.nxn_file.file_name)}
+                                onClick={() => viewingReportMeta.nxn_file && handleDownloadFile(viewingReportMeta.nxn_file.id, viewingReportMeta.nxn_file.file_name)}
                                 title="Download file"
                               >
                                 <Download className="h-4 w-4" />
