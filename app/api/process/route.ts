@@ -11,6 +11,9 @@ import type {
   NxnLookupRow,
 } from "@/lib/processors/transaction-processor"
 
+// For App Router - increase max duration for large file processing
+export const maxDuration = 60 // seconds
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
