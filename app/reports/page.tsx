@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2, Upload, FileText, X, AlertCircle } from "lucide-react"
 import { ExportButtons } from "@/components/ExportButtons"
+import { parseFile } from "@/lib/client-file-parsers"
 import type { ProcessedLineItem } from "@/components/ReportTable"
 
 interface ReportData {
@@ -92,19 +93,30 @@ export default function ReportsPage() {
     setError(null)
 
     try {
-      const formData = new FormData()
-
-      // Add transaction files
-      transactionFiles.forEach((f) => {
-        formData.append("transactionFiles", f.file)
+      // Parse files client-side to avoid Vercel body size limits
+      const transactionDataPromises = transactionFiles.map(async (f) => {
+        const parsed = await parseFile(f.file)
+        // Add source file name to each row
+        return parsed.data.map(row => ({ ...row, "Source File Name": f.name }))
       })
 
-      // Add NXN file
-      formData.append("nxnFile", nxnFile.file)
+      const transactionDataArrays = await Promise.all(transactionDataPromises)
+      const transactionData = transactionDataArrays.flat()
 
+      // Parse NXN file with header on row 2 (index 1)
+      const nxnParsed = await parseFile(nxnFile.file, { headerRow: 1 })
+      const nxnData = nxnParsed.data
+
+      // Send parsed JSON data instead of raw files
       const response = await fetch("/api/process", {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          transactionData,
+          nxnData,
+        }),
       })
 
       if (!response.ok) {
