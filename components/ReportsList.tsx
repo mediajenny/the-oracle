@@ -20,6 +20,7 @@ import { format } from "date-fns"
 interface Report {
   id: string
   name: string
+  report_type?: string
   created_at: string
   updated_at: string
   total_line_items?: string
@@ -28,6 +29,11 @@ interface Report {
   transaction_file_count?: number
   author_name?: string
   author_email?: string
+}
+
+const REPORT_TYPE_LABELS: Record<string, string> = {
+  dashboard_line_item_performance: "Line Item Performance",
+  creative: "Creative Report",
 }
 
 interface ReportsListProps {
@@ -144,6 +150,11 @@ export function ReportsList({ onViewReport, refreshTrigger }: ReportsListProps) 
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-muted-foreground" />
                     <h3 className="font-medium">{report.name}</h3>
+                    {report.report_type && (
+                      <Badge variant="outline" className="text-xs">
+                        {REPORT_TYPE_LABELS[report.report_type] || report.report_type}
+                      </Badge>
+                    )}
                   </div>
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
                     <div className="flex items-center gap-1">
@@ -156,7 +167,7 @@ export function ReportsList({ onViewReport, refreshTrigger }: ReportsListProps) 
                         <span className="text-xs">{report.author_name}</span>
                       </div>
                     )}
-                    {report.transaction_file_count !== undefined && (
+                    {report.transaction_file_count !== undefined && report.transaction_file_count > 0 && (
                       <Badge variant="secondary">
                         {report.transaction_file_count} file{report.transaction_file_count !== 1 ? "s" : ""}
                       </Badge>
@@ -229,4 +240,3 @@ export function ReportsList({ onViewReport, refreshTrigger }: ReportsListProps) 
     </>
   )
 }
-

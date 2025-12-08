@@ -16,9 +16,10 @@ export async function GET(request: NextRequest) {
     if (reportId) {
       // Get single report (owned by user)
       const result = await sql`
-        SELECT 
+        SELECT
           r.id,
           r.name,
+          r.report_type,
           r.transaction_file_ids,
           r.nxn_file_id,
           r.report_data,
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
             ) FILTER (WHERE uf.id IS NOT NULL),
             '[]'::jsonb
           ) as transaction_files,
-          CASE 
+          CASE
             WHEN nxn_file.id IS NOT NULL THEN
               jsonb_build_object(
                 'id', nxn_file.id,
@@ -56,8 +57,8 @@ export async function GET(request: NextRequest) {
         LEFT JOIN users u ON r.user_id = u.id
         WHERE r.id = ${reportId}
           AND r.user_id = ${session.user.id}
-        GROUP BY r.id, r.name, r.transaction_file_ids, r.nxn_file_id, r.report_data, r.share_token, r.created_at, r.updated_at, 
-                 nxn_file.id, nxn_file.file_name, nxn_file.file_size, nxn_file.row_count, nxn_file.created_at, 
+        GROUP BY r.id, r.name, r.report_type, r.transaction_file_ids, r.nxn_file_id, r.report_data, r.share_token, r.created_at, r.updated_at,
+                 nxn_file.id, nxn_file.file_name, nxn_file.file_size, nxn_file.row_count, nxn_file.created_at,
                  u.name, u.email
       `
 
@@ -67,14 +68,12 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({ report: result.rows[0] })
     } else {
-      // Get all reports for user (including shared reports)
-      const teamId = (session.user as any).teamId
-      
-      // Simple query - get user's own reports first
+      // Get all reports for user
       const result = await sql`
-        SELECT 
+        SELECT
           r.id,
           r.name,
+          r.report_type,
           r.created_at,
           r.updated_at,
           r.report_data->'summary'->>'totalLineItems' as total_line_items,
@@ -95,6 +94,45 @@ export async function GET(request: NextRequest) {
     console.error("Reports fetch error:", error)
     return NextResponse.json(
       { error: error.message || "Failed to fetch reports" },
+      { status: 500 }
+    )
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const { name, report_type, report_data } = body
+
+    if (!name) {
+      return NextResponse.json({ error: "Report name is required" }, { status: 400 })
+    }
+
+    if (!report_data) {
+      return NextResponse.json({ error: "Report data is required" }, { status: 400 })
+    }
+
+    const reportType = report_type || 'dashboard_line_item_performance'
+
+    const result = await sql`
+      INSERT INTO reports (user_id, name, report_type, report_data)
+      VALUES (${session.user.id}, ${name}, ${reportType}, ${JSON.stringify(report_data)})
+      RETURNING id, name, report_type, created_at
+    `
+
+    return NextResponse.json({
+      success: true,
+      report: result.rows[0]
+    })
+  } catch (error: any) {
+    console.error("Report save error:", error)
+    return NextResponse.json(
+      { error: error.message || "Failed to save report" },
       { status: 500 }
     )
   }
@@ -134,4 +172,3 @@ export async function DELETE(request: NextRequest) {
     )
   }
 }
-

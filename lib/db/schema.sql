@@ -39,13 +39,28 @@ CREATE TABLE IF NOT EXISTS reports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name VARCHAR(255),
-  transaction_file_ids UUID[] NOT NULL, -- Array of uploaded_files IDs
-  nxn_file_id UUID NOT NULL REFERENCES uploaded_files(id) ON DELETE CASCADE,
+  report_type VARCHAR(100) DEFAULT 'dashboard_line_item_performance', -- 'dashboard_line_item_performance' or 'creative'
+  transaction_file_ids UUID[], -- Array of uploaded_files IDs (nullable for client-side reports)
+  nxn_file_id UUID REFERENCES uploaded_files(id) ON DELETE CASCADE, -- nullable for client-side reports
   report_data JSONB, -- Store the processed report data
   share_token VARCHAR(255) UNIQUE, -- Unique token for public sharing
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Migration: Add report_type column if it doesn't exist (for existing databases)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'reports' AND column_name = 'report_type') THEN
+    ALTER TABLE reports ADD COLUMN report_type VARCHAR(100) DEFAULT 'dashboard_line_item_performance';
+  END IF;
+  -- Make transaction_file_ids nullable for client-side processed reports
+  ALTER TABLE reports ALTER COLUMN transaction_file_ids DROP NOT NULL;
+  ALTER TABLE reports ALTER COLUMN nxn_file_id DROP NOT NULL;
+EXCEPTION WHEN OTHERS THEN
+  -- Ignore errors if columns are already nullable
+  NULL;
+END $$;
 
 -- File shares table
 CREATE TABLE IF NOT EXISTS file_shares (
@@ -130,4 +145,3 @@ CREATE TRIGGER update_teams_updated_at BEFORE UPDATE ON teams
 DROP TRIGGER IF EXISTS update_user_team_permissions_updated_at ON user_team_permissions;
 CREATE TRIGGER update_user_team_permissions_updated_at BEFORE UPDATE ON user_team_permissions
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-

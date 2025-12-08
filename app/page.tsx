@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { BarChart3, Image } from "lucide-react"
+import { BarChart3, Image, History } from "lucide-react"
 
 export default function Home() {
   return (
@@ -14,7 +14,7 @@ export default function Home() {
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 max-w-3xl mx-auto">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-5xl mx-auto">
         <Link href="/reports" className="block">
           <Card className="h-full transition-all hover:shadow-lg hover:border-primary/50 cursor-pointer">
             <CardHeader>
@@ -56,6 +56,28 @@ export default function Home() {
             </div>
           </CardContent>
         </Card>
+
+        <Link href="/past-reports" className="block">
+          <Card className="h-full transition-all hover:shadow-lg hover:border-primary/50 cursor-pointer">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-green-100 text-green-600">
+                  <History className="h-6 w-6" />
+                </div>
+                <CardTitle className="text-lg">Past Reports</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <CardDescription className="text-sm">
+                View and manage your previously saved reports. Access report history,
+                download exports, and track your analysis over time.
+              </CardDescription>
+              <div className="mt-4 text-sm text-primary font-medium">
+                View Reports →
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
     </div>
   )

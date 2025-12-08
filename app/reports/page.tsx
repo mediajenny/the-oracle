@@ -8,7 +8,7 @@ import { TopLineItemsRanking } from "@/components/TopLineItemsRanking"
 import { FilterAndSearch } from "@/components/FilterAndSearch"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Loader2, Upload, FileText, X, AlertCircle } from "lucide-react"
+import { Loader2, Upload, FileText, X, AlertCircle, Save, Check } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ExportButtons } from "@/components/ExportButtons"
@@ -57,6 +57,10 @@ export default function ReportsPage() {
   const [bridge, setBridge] = useState("")
   const [reportName, setReportName] = useState(getTodayFormatted())
   const [isEditingName, setIsEditingName] = useState(false)
+
+  // Save report state
+  const [saving, setSaving] = useState(false)
+  const [savedReportId, setSavedReportId] = useState<string | null>(null)
 
   // Filter state
   const [globalSearchTerm, setGlobalSearchTerm] = useState("")
@@ -178,6 +182,40 @@ export default function ReportsPage() {
     setBridge("")
     setReportName(getTodayFormatted())
     setIsEditingName(false)
+    setSavedReportId(null)
+  }
+
+  const saveReport = async () => {
+    if (!reportData) return
+
+    setSaving(true)
+    setError(null)
+
+    try {
+      const response = await fetch("/api/reports", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: reportName,
+          report_type: "dashboard_line_item_performance",
+          report_data: reportData,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to save report")
+      }
+
+      const data = await response.json()
+      setSavedReportId(data.report.id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred while saving the report")
+    } finally {
+      setSaving(false)
+    }
   }
 
   // Show report view if we have data
@@ -191,10 +229,46 @@ export default function ReportsPage() {
               Generated from {transactionFiles.length} transaction file(s) and NXN lookup
             </p>
           </div>
-          <Button variant="outline" onClick={resetReport}>
-            Create New Report
-          </Button>
+          <div className="flex items-center gap-2">
+            {savedReportId ? (
+              <Button variant="outline" disabled className="text-green-600">
+                <Check className="mr-2 h-4 w-4" />
+                Saved
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={saveReport} disabled={saving}>
+                {saving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    Save Report
+                  </>
+                )}
+              </Button>
+            )}
+            <Button variant="outline" onClick={resetReport}>
+              Create New Report
+            </Button>
+          </div>
         </div>
+
+        {savedReportId && (
+          <Card className="bg-green-50 border-green-200">
+            <CardContent className="pt-6">
+              <p className="text-sm text-green-800">
+                Report saved successfully! View it in{" "}
+                <a href="/past-reports" className="underline font-medium">
+                  Past Reports
+                </a>
+                .
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="bg-blue-50 border-blue-200">
           <CardContent className="pt-6">
