@@ -1,21 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
 import { sql } from "@/lib/db"
+
+// Default user ID for anonymous users (no authentication)
+const ANONYMOUS_USER_ID = '00000000-0000-0000-0000-000000000000'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
     const { searchParams } = new URL(request.url)
     const reportId = searchParams.get("id")
 
     if (reportId) {
-      // Get single report (owned by user)
+      // Get single report
       const result = await sql`
         SELECT
           r.id,
@@ -54,7 +49,6 @@ export async function GET(request: NextRequest) {
         LEFT JOIN uploaded_files uf ON uf.id = ANY(r.transaction_file_ids)
         LEFT JOIN uploaded_files nxn_file ON nxn_file.id = r.nxn_file_id
         WHERE r.id = ${reportId}
-          AND r.user_id = ${user.id}
         GROUP BY r.id, r.name, r.report_type, r.transaction_file_ids, r.nxn_file_id, r.report_data, r.share_token, r.created_at, r.updated_at,
                  nxn_file.id, nxn_file.file_name, nxn_file.file_size, nxn_file.row_count, nxn_file.created_at
       `
@@ -65,7 +59,7 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({ report: result.rows[0] })
     } else {
-      // Get all reports for user
+      // Get all reports
       const result = await sql`
         SELECT
           r.id,
@@ -78,7 +72,6 @@ export async function GET(request: NextRequest) {
           r.report_data->'summary'->>'totalRevenue' as total_revenue,
           array_length(r.transaction_file_ids, 1) as transaction_file_count
         FROM reports r
-        WHERE r.user_id = ${user.id}
         ORDER BY r.created_at DESC
       `
 
@@ -95,13 +88,6 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
     const body = await request.json()
     const { name, report_type, report_data } = body
 
@@ -117,7 +103,7 @@ export async function POST(request: NextRequest) {
 
     const result = await sql`
       INSERT INTO reports (user_id, name, report_type, report_data)
-      VALUES (${user.id}, ${name}, ${reportType}, ${JSON.stringify(report_data)})
+      VALUES (${ANONYMOUS_USER_ID}, ${name}, ${reportType}, ${JSON.stringify(report_data)})
       RETURNING id, name, report_type, created_at
     `
 
@@ -136,13 +122,6 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
     const { searchParams } = new URL(request.url)
     const reportId = searchParams.get("id")
 
@@ -150,13 +129,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Report ID is required" }, { status: 400 })
     }
 
-    // Verify ownership before deleting
+    // Check if report exists
     const checkResult = await sql`
-      SELECT id FROM reports WHERE id = ${reportId} AND user_id = ${user.id}
+      SELECT id FROM reports WHERE id = ${reportId}
     `
 
     if (checkResult.rows.length === 0) {
-      return NextResponse.json({ error: "Report not found or access denied" }, { status: 404 })
+      return NextResponse.json({ error: "Report not found" }, { status: 404 })
     }
 
     await sql`DELETE FROM reports WHERE id = ${reportId}`
