@@ -11,6 +11,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Loader2, Upload, FileText, X, AlertCircle } from "lucide-react"
 import { ExportButtons } from "@/components/ExportButtons"
 import { parseFile } from "@/lib/client-file-parsers"
+import {
+  loadMultipleTransactionFiles,
+  processTransactions,
+  getSummaryStats,
+  getRevenueBySourceFile,
+  type TransactionRow,
+  type NxnLookupRow,
+} from "@/lib/processors/transaction-processor"
 import type { ProcessedLineItem } from "@/components/ReportTable"
 
 interface ReportData {
@@ -93,7 +101,7 @@ export default function ReportsPage() {
     setError(null)
 
     try {
-      // Parse files client-side to avoid Vercel body size limits
+      // Parse files client-side
       const transactionDataPromises = transactionFiles.map(async (f) => {
         const parsed = await parseFile(f.file)
         // Add source file name to each row
@@ -101,31 +109,24 @@ export default function ReportsPage() {
       })
 
       const transactionDataArrays = await Promise.all(transactionDataPromises)
-      const transactionData = transactionDataArrays.flat()
+      const rawTransactionData = transactionDataArrays.flat()
 
       // Parse NXN file with header on row 2 (index 1)
       const nxnParsed = await parseFile(nxnFile.file, { headerRow: 1 })
       const nxnData = nxnParsed.data
 
-      // Send parsed JSON data instead of raw files
-      const response = await fetch("/api/process", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          transactionData,
-          nxnData,
-        }),
+      // Process entirely client-side to avoid Vercel body size limits
+      const transactionData = loadMultipleTransactionFiles(rawTransactionData as TransactionRow[])
+      const { results, unmatchedNxn } = processTransactions(transactionData, nxnData as NxnLookupRow[])
+      const summary = getSummaryStats(results, nxnData as NxnLookupRow[])
+      const revenueByFile = getRevenueBySourceFile(rawTransactionData as TransactionRow[])
+
+      setReportData({
+        results,
+        unmatchedNxn,
+        summary,
+        revenueByFile,
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to process files")
-      }
-
-      const data = await response.json()
-      setReportData(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred while processing files")
     } finally {
