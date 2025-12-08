@@ -1,17 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { uploadFile, deleteFile } from "@/lib/storage"
 import { sql } from "@/lib/db"
 import { parseFile } from "@/lib/file-parsers"
 
+// Default user ID for anonymous users (no authentication)
+const ANONYMOUS_USER_ID = '00000000-0000-0000-0000-000000000000'
+
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
     const formData = await request.formData()
     const file = formData.get("file") as File
     const fileType = formData.get("fileType") as string // 'transaction' or 'nxn_lookup'
@@ -35,7 +31,7 @@ export async function POST(request: NextRequest) {
     let size: number
 
     try {
-      const result = await uploadFile(file, session.user.id)
+      const result = await uploadFile(file, ANONYMOUS_USER_ID)
       url = result.url
       size = result.size
     } catch (error: any) {
@@ -152,7 +148,7 @@ export async function POST(request: NextRequest) {
     // Save file metadata to database
     const result = await sql`
       INSERT INTO uploaded_files (user_id, file_name, file_type, blob_url, file_size, mime_type, row_count)
-      VALUES (${session.user.id}, ${file.name}, ${fileType}, ${url}, ${size}, ${file.type}, ${parsedData.data.length})
+      VALUES (${ANONYMOUS_USER_ID}, ${file.name}, ${fileType}, ${url}, ${size}, ${file.type}, ${parsedData.data.length})
       RETURNING id, file_name, file_type, blob_url, file_size, row_count, created_at
     `
 
@@ -179,44 +175,25 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
     const { searchParams } = new URL(request.url)
     const fileId = searchParams.get("id")
     const download = searchParams.get("download") === "true"
 
     // If download=true, serve the file
     if (download && fileId) {
-      // Verify ownership or shared access
       const fileResult = await sql`
         SELECT
           uf.id,
           uf.file_name,
           uf.blob_url,
-          uf.mime_type,
-          uf.user_id,
-          CASE
-            WHEN uf.user_id = ${session.user.id} THEN true
-            WHEN EXISTS (
-              SELECT 1 FROM file_shares fs
-              WHERE fs.file_id = uf.id
-              AND (
-                fs.shared_with_user_id = ${session.user.id}
-                OR (fs.shared_with_team_id = ${session.user.teamId} AND ${session.user.teamId} IS NOT NULL)
-              )
-            ) THEN true
-            ELSE false
-          END as has_access
+          uf.mime_type
         FROM uploaded_files uf
         WHERE uf.id = ${fileId}
       `
 
-      if (fileResult.rows.length === 0 || !fileResult.rows[0].has_access) {
+      if (fileResult.rows.length === 0) {
         return NextResponse.json(
-          { error: "File not found or access denied" },
+          { error: "File not found" },
           { status: 404 }
         )
       }
@@ -250,25 +227,23 @@ export async function GET(request: NextRequest) {
         }
       } else {
         // Handle Vercel Blob URLs - redirect to the blob URL
-        // The blob URL is already public, so we can redirect directly
         return NextResponse.redirect(blobUrl)
       }
     }
 
-    // Otherwise, return file list (existing GET behavior)
+    // Otherwise, return file list
     const fileType = searchParams.get("fileType")
 
     let query = sql`
       SELECT id, file_name, file_type, blob_url, file_size, row_count, created_at
       FROM uploaded_files
-      WHERE user_id = ${session.user.id}
     `
 
     if (fileType) {
       query = sql`
         SELECT id, file_name, file_type, blob_url, file_size, row_count, created_at
         FROM uploaded_files
-        WHERE user_id = ${session.user.id} AND file_type = ${fileType}
+        WHERE file_type = ${fileType}
       `
     }
 
@@ -296,11 +271,6 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
     const { searchParams } = new URL(request.url)
     const fileId = searchParams.get("id")
 
@@ -311,15 +281,15 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Verify ownership
+    // Check if file exists
     const checkResult = await sql`
       SELECT id, blob_url FROM uploaded_files
-      WHERE id = ${fileId} AND user_id = ${session.user.id}
+      WHERE id = ${fileId}
     `
 
     if (checkResult.rows.length === 0) {
       return NextResponse.json(
-        { error: "File not found or access denied" },
+        { error: "File not found" },
         { status: 404 }
       )
     }
@@ -337,7 +307,7 @@ export async function DELETE(request: NextRequest) {
     // Delete from database
     await sql`
       DELETE FROM uploaded_files
-      WHERE id = ${fileId} AND user_id = ${session.user.id}
+      WHERE id = ${fileId}
     `
 
     return NextResponse.json({ success: true })

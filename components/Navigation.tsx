@@ -11,7 +11,7 @@ export function Navigation() {
           The Oracle
         </Link>
         <div className="flex items-center gap-4">
-          <Link href="/reports">
+          <Link href="/past-reports">
             <Button variant="ghost">Reports</Button>
           </Link>
         </div>
