@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useDropzone } from "react-dropzone"
 import { MetricsCards } from "@/components/MetricsCards"
 import { ReportTable } from "@/components/ReportTable"
@@ -9,6 +9,8 @@ import { FilterAndSearch } from "@/components/FilterAndSearch"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2, Upload, FileText, X, AlertCircle } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { ExportButtons } from "@/components/ExportButtons"
 import { parseFile } from "@/lib/client-file-parsers"
 import {
@@ -33,6 +35,15 @@ interface UploadedFile {
   size: number
 }
 
+// Helper to get today's date in MM.DD.YY format
+function getTodayFormatted(): string {
+  const now = new Date()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  const year = String(now.getFullYear()).slice(-2)
+  return `${month}.${day}.${year}`
+}
+
 export default function ReportsPage() {
   const [transactionFiles, setTransactionFiles] = useState<UploadedFile[]>([])
   const [nxnFile, setNxnFile] = useState<UploadedFile | null>(null)
@@ -40,10 +51,28 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Report naming state
+  const [advertiser, setAdvertiser] = useState("")
+  const [campaign, setCampaign] = useState("")
+  const [bridge, setBridge] = useState("")
+  const [reportName, setReportName] = useState(getTodayFormatted())
+  const [isEditingName, setIsEditingName] = useState(false)
+
   // Filter state
   const [globalSearchTerm, setGlobalSearchTerm] = useState("")
   const [globalInsertionOrderFilter, setGlobalInsertionOrderFilter] = useState<string[]>([])
   const [globalAdvertiserFilter, setGlobalAdvertiserFilter] = useState<string[]>([])
+
+  // Auto-generate report name when fields change
+  useEffect(() => {
+    if (!isEditingName) {
+      const parts = [getTodayFormatted()]
+      if (advertiser.trim()) parts.push(advertiser.trim())
+      if (campaign.trim()) parts.push(campaign.trim())
+      if (bridge.trim()) parts.push(bridge.trim())
+      setReportName(parts.join('_'))
+    }
+  }, [advertiser, campaign, bridge, isEditingName])
 
   const onDropTransactions = useCallback((acceptedFiles: File[]) => {
     const newFiles = acceptedFiles.map(file => ({
@@ -144,6 +173,11 @@ export default function ReportsPage() {
     setGlobalSearchTerm("")
     setGlobalInsertionOrderFilter([])
     setGlobalAdvertiserFilter([])
+    setAdvertiser("")
+    setCampaign("")
+    setBridge("")
+    setReportName(getTodayFormatted())
+    setIsEditingName(false)
   }
 
   // Show report view if we have data
@@ -152,7 +186,7 @@ export default function ReportsPage() {
       <div className="container mx-auto py-8 space-y-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Dashboard Line Item Performance Report</h1>
+            <h1 className="text-3xl font-bold">{reportName}</h1>
             <p className="text-muted-foreground mt-2">
               Generated from {transactionFiles.length} transaction file(s) and NXN lookup
             </p>
@@ -213,7 +247,7 @@ export default function ReportsPage() {
 
         {/* Export Buttons */}
         <div className="flex justify-end">
-          <ExportButtons data={reportData.results} />
+          <ExportButtons data={reportData.results} reportName={reportName} />
         </div>
 
         {reportData.unmatchedNxn.length > 0 && (
@@ -380,6 +414,75 @@ export default function ReportsPage() {
         </Card>
       </div>
 
+      {/* Report Details */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Report Details</CardTitle>
+          <CardDescription>
+            Name format: MM.DD.YY_Advertiser_Campaign_Bridge (Optional)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="advertiser">Advertiser *</Label>
+              <Input
+                id="advertiser"
+                placeholder="Enter advertiser name"
+                value={advertiser}
+                onChange={(e) => setAdvertiser(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="campaign">Campaign *</Label>
+              <Input
+                id="campaign"
+                placeholder="Enter campaign name"
+                value={campaign}
+                onChange={(e) => setCampaign(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="bridge">Bridge (Optional)</Label>
+              <Input
+                id="bridge"
+                placeholder="Enter bridge (optional)"
+                value={bridge}
+                onChange={(e) => setBridge(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="reportName">Report Name</Label>
+            <div className="flex gap-2">
+              <Input
+                id="reportName"
+                value={reportName}
+                onChange={(e) => {
+                  setReportName(e.target.value)
+                  setIsEditingName(true)
+                }}
+                className="flex-1"
+              />
+              {isEditingName && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditingName(false)}
+                >
+                  Reset
+                </Button>
+              )}
+            </div>
+            {isEditingName && (
+              <p className="text-xs text-muted-foreground">
+                Editing manually. Click Reset to auto-generate from fields.
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {error && (
         <Card className="bg-destructive/10 border-destructive/50">
           <CardContent className="pt-6">
@@ -395,7 +498,7 @@ export default function ReportsPage() {
         <Button
           size="lg"
           onClick={generateReport}
-          disabled={loading || transactionFiles.length === 0 || !nxnFile}
+          disabled={loading || transactionFiles.length === 0 || !nxnFile || !advertiser.trim() || !campaign.trim()}
         >
           {loading ? (
             <>
@@ -407,6 +510,11 @@ export default function ReportsPage() {
           )}
         </Button>
       </div>
+      {(transactionFiles.length > 0 || nxnFile) && (!advertiser.trim() || !campaign.trim()) && (
+        <p className="text-center text-sm text-muted-foreground">
+          Please enter Advertiser and Campaign to generate the report
+        </p>
+      )}
     </div>
   )
 }

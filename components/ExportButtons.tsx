@@ -8,15 +8,18 @@ import type { ProcessedLineItem } from "@/components/ReportTable"
 
 interface ExportButtonsProps {
   data: ProcessedLineItem[]
+  reportName?: string
 }
 
-export function ExportButtons({ data }: ExportButtonsProps) {
+export function ExportButtons({ data, reportName }: ExportButtonsProps) {
   const handleExportExcel = () => {
-    exportToExcel(data)
+    const fileName = reportName ? `${reportName}.xlsx` : "line_item_performance_report.xlsx"
+    exportToExcel(data, fileName)
   }
 
   const handleExportCSV = () => {
-    exportToCSV(data)
+    const fileName = reportName ? `${reportName}.csv` : "line_item_performance_report.csv"
+    exportToCSV(data, fileName)
   }
 
   return (
@@ -32,4 +35,3 @@ export function ExportButtons({ data }: ExportButtonsProps) {
     </div>
   )
 }
-
